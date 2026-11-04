@@ -1,6 +1,6 @@
 import { expect, test, type Page } from "@playwright/test";
 import { strToU8, zipSync } from "fflate";
-import { clearLocalData, readerState, shot, waitForReader } from "./helpers";
+import { bookPoint, clearLocalData, readerState, shot, showControls, waitForReader } from "./helpers";
 
 const BOOK = "devdas";
 
@@ -9,14 +9,24 @@ async function openReader(page: Page, path = `/read/${BOOK}`) {
   return waitForReader(page);
 }
 
+/** Turns forward (edge tap on touch screens, → elsewhere) and waits until the reader has moved. */
 async function next(page: Page, isMobile: boolean) {
-  if (isMobile) {
-    const vp = page.viewportSize()!;
-    await page.touchscreen.tap(vp.width - 20, vp.height / 2);
-  } else {
-    await page.keyboard.press("ArrowRight");
-  }
-  await page.waitForTimeout(700);
+  await turnAndWait(page, async () => {
+    if (isMobile) {
+      const vp = page.viewportSize()!;
+      await page.touchscreen.tap(vp.width - 20, vp.height / 2);
+    } else {
+      await page.keyboard.press("ArrowRight");
+    }
+  });
+}
+
+/** Runs an input that should turn the page, then waits for the new location (a chapter may need loading). */
+async function turnAndWait(page: Page, input: () => Promise<void>) {
+  const before = (await readerState(page)).cfi;
+  await input();
+  await expect.poll(async () => (await readerState(page)).cfi, { timeout: 10_000 }).not.toBe(before);
+  await page.waitForTimeout(450); // let the slide settle before reading the page
 }
 
 test.describe("reader", () => {
@@ -64,11 +74,23 @@ test.describe("reader", () => {
     await next(page, mobile);
     const b = await readerState(page);
     expect(b.cfi).not.toBe(a.cfi);
-    if (mobile) await page.touchscreen.tap(15, page.viewportSize()!.height / 2);
-    else await page.keyboard.press("ArrowLeft");
-    await page.waitForTimeout(700);
-    const c = await readerState(page);
-    expect(c.cfi).toBe(a.cfi);
+    // back: on a phone, a tap at the very edge (foliate's margin, outside the text frame)
+    await turnAndWait(page, async () => {
+      if (mobile) await page.touchscreen.tap(15, page.viewportSize()!.height / 2);
+      else await page.keyboard.press("ArrowLeft");
+    });
+    expect((await readerState(page)).cfi).toBe(a.cfi);
+  });
+
+  test("taps made while a chapter is loading are not lost", async ({ page }) => {
+    await openReader(page);
+    // the title page is a single page: the first turn loads chapter 1, the second arrives during that load
+    await page.keyboard.press("ArrowRight");
+    await page.keyboard.press("ArrowRight");
+    await expect.poll(async () => (await readerState(page)).section, { timeout: 10_000 }).toBe(1);
+    await expect
+      .poll(async () => (await readerState(page)).cfi, { timeout: 10_000 })
+      .not.toMatch(/^epubcfi\(\/6\/4!\/4\/2\/2,\/1:0,/); // past chapter 1's first page
   });
 
   test("tapping the centre toggles the reader controls", async ({ page }, info) => {
@@ -96,10 +118,13 @@ test.describe("reader", () => {
         if (p) getSelection()?.selectAllChildren(p);
       });
     }
-    const vp = page.viewportSize()!;
-    await page.mouse.click(vp.width - 30, vp.height / 2);
+    // a tap in the "next page" zone of the book only dismisses the selection…
+    const p = await bookPoint(page, 0.9);
+    await page.mouse.click(p.x, p.y);
     await page.waitForTimeout(600);
     expect((await readerState(page)).cfi).toBe(before.cfi);
+    // …and the next one turns the page
+    await turnAndWait(page, () => page.mouse.click(p.x, p.y));
   });
 
   test("changing text size reflows but keeps the reading position", async ({ page }, info) => {
@@ -108,8 +133,8 @@ test.describe("reader", () => {
     for (let i = 0; i < 3; i++) await next(page, mobile);
     const before = await readerState(page);
     const anchor = before.visible.slice(0, 14);
-    await page.keyboard.press("Escape"); // show controls
-    await page.getByRole("button", { name: "পড়ার সেটিংস" }).click({ force: true });
+    await showControls(page);
+    await page.getByRole("button", { name: "পড়ার সেটিংস" }).click();
     await page.getByRole("button", { name: "বড় করুন" }).click();
     await page.getByRole("button", { name: "বড় করুন" }).click();
     await page.keyboard.press("Escape");
@@ -149,7 +174,7 @@ test.describe("reader", () => {
     test.skip(!["mobile-390", "desktop-1920"].includes(info.project.name), "long test: two viewports");
     await openReader(page, "/read/bardidi");
     // jump close to the end with the progress slider, then turn pages to the last one
-    await page.keyboard.press("Escape");
+    await showControls(page);
     const slider = page.getByRole("slider");
     await slider.focus();
     await slider.press("End");

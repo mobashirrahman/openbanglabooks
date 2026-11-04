@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import { notFoundMetadata } from "@/lib/seo/not-found";
 import { Suspense } from "react";
 import { notFound } from "next/navigation";
 import { BookGrid, ListingHeader } from "@/components/catalog/book-grid";
@@ -9,6 +10,10 @@ import { getDictionary, getLocale } from "@/lib/i18n";
 import { absoluteUrl, alternates } from "@/lib/seo/site";
 import { breadcrumbJsonLd } from "@/lib/seo/json-ld";
 
+// Unknown slugs wait for the complete render instead of streaming a fallback shell,
+// so notFound() runs before any bytes are sent and the response is a real 404.
+export const ensureStatic = "navigation";
+
 export async function generateStaticParams() {
   return (await getGenres()).map((g) => ({ slug: g.slug }));
 }
@@ -17,7 +22,7 @@ export async function generateMetadata({ params }: PageProps<"/[lang]/genres/[sl
   const { slug } = await params;
   const locale = await getLocale();
   const genre = await getGenre(slug);
-  if (!genre) return {};
+  if (!genre) return notFoundMetadata(locale);
   const name = locale === "bn" ? genre.name_bn : genre.name_en;
   return {
     title: locale === "bn" ? `বাংলা ${name} — অনলাইনে পড়ুন` : `Bengali ${name.toLowerCase()} — read online`,

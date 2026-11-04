@@ -64,6 +64,7 @@
   --on-cloth: var(--ivory-100);
   --on-cloth-muted: rgb(245 239 228 / 0.74);
   --foil: var(--brass-500);
+  --mark: var(--cloth); /* the logo mark on page surfaces: cloth on paper, foil at night */
   --foil-text: var(--brass-300); /* brass that may carry text, on cloth only */
   --accent: var(--terracotta-500);
   --accent-text: var(--terracotta-700);
@@ -98,6 +99,7 @@
 
 :root[data-theme="dark"] {
   --bg: var(--charcoal-900);
+  --mark: var(--foil);
   --surface: var(--charcoal-800);
   --sunken: var(--charcoal-950);
   --fg: #ece6da;
@@ -122,6 +124,7 @@
   /* no-JS fallback; the theme script normally sets data-theme before paint */
   :root:not([data-theme]) {
     --bg: var(--charcoal-900);
+    --mark: var(--foil);
     --surface: var(--charcoal-800);
     --sunken: var(--charcoal-950);
     --fg: #ece6da;
@@ -151,6 +154,7 @@
   --color-on-cloth: var(--on-cloth);
   --color-on-cloth-muted: var(--on-cloth-muted);
   --color-foil: var(--foil);
+  --color-mark: var(--mark);
   --color-foil-text: var(--foil-text);
   --color-accent: var(--accent);
   --color-accent-text: var(--accent-text);

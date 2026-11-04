@@ -119,6 +119,28 @@ export type Engine = {
   destroy(): void;
 };
 
+/**
+ * foliate snaps the page into place on every `touchend` – after a swipe, but
+ * also after a tap that never scrolled anything. That snap animation runs
+ * alongside the page turn the same tap triggers; when it finishes last it
+ * pulls the page back and the tap is lost. A touch that never moved needs no
+ * snapping, so its `touchend` is kept from foliate (capture phase, before
+ * foliate's own listeners). Swipes pass through untouched.
+ */
+function guardTapSnap(target: EventTarget) {
+  let moved = false;
+  const opts = { capture: true, passive: true } as const;
+  target.addEventListener("touchstart", () => {
+    moved = false;
+  }, opts);
+  target.addEventListener("touchmove", () => {
+    moved = true;
+  }, opts);
+  target.addEventListener("touchend", (e) => {
+    if (!moved) e.stopPropagation();
+  }, opts);
+}
+
 let foliateLoaded: Promise<unknown> | null = null;
 function loadFoliate() {
   foliateLoaded ??= import("@foliate/view.js");
@@ -148,6 +170,7 @@ export async function createEngine(
 
   const view = document.createElement("foliate-view") as FoliateView;
   view.style.cssText = "display:block;width:100%;height:100%";
+  guardTapSnap(view); // the page margins (foliate's shadow DOM)
   container.append(view);
 
   view.addEventListener("relocate", (e) => {
@@ -191,6 +214,7 @@ export async function createEngine(
   });
   view.addEventListener("load", (e) => {
     const { doc, index } = (e as CustomEvent<{ doc: Document; index: number }>).detail;
+    if (doc.defaultView) guardTapSnap(doc.defaultView); // the text (section iframe)
     callbacks.onLoad?.(doc, index);
   });
   view.addEventListener("external-link", (e) => {

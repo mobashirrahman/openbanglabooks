@@ -27,7 +27,9 @@ type Item = { key: string; href: string };
 export function SearchDialog({ locale, labels }: { locale: Locale; labels: Labels }) {
   const [open, setOpen] = useState(false);
   const [query, setQuery] = useState("");
-  const [data, setData] = useState<SearchResponse | null>(null);
+  const [fetched, setFetched] = useState<SearchResponse | null>(null);
+  // results belong to a non-empty query: clearing the box clears them, no effect needed
+  const data = query.trim() ? fetched : null;
   const [active, setActive] = useState(0);
   const [pending, startTransition] = useTransition();
   const router = useRouter();
@@ -50,10 +52,7 @@ export function SearchDialog({ locale, labels }: { locale: Locale; labels: Label
 
   useEffect(() => {
     const q = query.trim();
-    if (!q) {
-      setData(null);
-      return;
-    }
+    if (!q) return;
     const timer = setTimeout(() => {
       abortRef.current?.abort();
       const ctrl = new AbortController();
@@ -62,7 +61,7 @@ export function SearchDialog({ locale, labels }: { locale: Locale; labels: Label
         try {
           const res = await fetch(`/api/search?q=${encodeURIComponent(q)}&lang=${locale}`, { signal: ctrl.signal });
           if (res.ok) {
-            setData((await res.json()) as SearchResponse);
+            setFetched((await res.json()) as SearchResponse);
             setActive(0);
           }
         } catch {

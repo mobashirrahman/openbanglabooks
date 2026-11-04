@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import { notFoundMetadata } from "@/lib/seo/not-found";
 import Link from "next/link";
 import { Suspense } from "react";
 import { notFound } from "next/navigation";
@@ -12,6 +13,10 @@ import { localizedPath } from "@/lib/i18n/config";
 import { absoluteUrl, alternates } from "@/lib/seo/site";
 import { breadcrumbJsonLd, personJsonLd } from "@/lib/seo/json-ld";
 
+// Unknown slugs wait for the complete render instead of streaming a fallback shell,
+// so notFound() runs before any bytes are sent and the response is a real 404.
+export const ensureStatic = "navigation";
+
 export async function generateStaticParams() {
   return (await getAuthors()).map((a) => ({ slug: a.slug }));
 }
@@ -20,7 +25,7 @@ export async function generateMetadata({ params }: PageProps<"/[lang]/authors/[s
   const { slug } = await params;
   const locale = await getLocale();
   const author = await getAuthor(slug);
-  if (!author) return {};
+  if (!author) return notFoundMetadata(locale);
   const name = locale === "bn" ? author.name_bn : author.name_en;
   const title = locale === "bn" ? `${author.name_bn}-এর বই — জীবনী ও রচনাবলি` : `${author.name_en} — books and biography`;
   const bio = (locale === "bn" ? author.bio_bn : author.bio_en) ?? "";

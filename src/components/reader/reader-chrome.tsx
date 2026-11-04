@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import { Dialog } from "radix-ui";
 import { ArrowLeft, Bookmark, BookmarkCheck, List, Minus, Plus, Type, X } from "lucide-react";
 import { chapterLabel, type Relocation, type TocItem } from "@/lib/reader/engine";
@@ -55,6 +55,7 @@ export function ReaderChrome(props: {
         )}
         aria-hidden={!visible}
         inert={!visible}
+        data-reader-chrome
         onPointerMove={props.onPointerActivity}
       >
         <div className="pointer-events-auto flex h-14 items-center gap-1 border-b border-[color-mix(in_oklab,var(--ink)_10%,transparent)] bg-[var(--paper)] px-2 sm:px-4">
@@ -107,6 +108,7 @@ export function ReaderChrome(props: {
         )}
         aria-hidden={!visible}
         inert={!visible}
+        data-reader-chrome
         onPointerMove={props.onPointerActivity}
       >
         <div className="pointer-events-auto border-t border-[color-mix(in_oklab,var(--ink)_10%,transparent)] bg-[var(--paper)] px-4 pt-3 pb-4 sm:px-6">
@@ -160,9 +162,14 @@ function ProgressSlider({
   valueText: string;
   onCommit: (f: number) => void;
 }) {
+  // a value being dragged; dropped as soon as the reader arrives somewhere new
   const [value, setValue] = useState<number | null>(null);
+  const [seen, setSeen] = useState(fraction);
+  if (seen !== fraction) {
+    setSeen(fraction);
+    setValue(null);
+  }
   const shown = value ?? fraction;
-  useEffect(() => setValue(null), [fraction]);
   const commit = () => {
     if (value != null) onCommit(value);
   };

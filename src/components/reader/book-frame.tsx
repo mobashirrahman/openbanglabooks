@@ -1,6 +1,5 @@
 "use client";
 
-import { useEffect, useState } from "react";
 import { ChevronLeft, ChevronRight } from "lucide-react";
 import { cn } from "@/lib/utils";
 
@@ -17,7 +16,7 @@ export function BookFrame({
   columns,
   mobile,
   fraction,
-  turnDir,
+  sweep,
   dark,
   onEdge,
   labels,
@@ -28,18 +27,13 @@ export function BookFrame({
   columns: 1 | 2;
   mobile: boolean;
   fraction: number;
-  turnDir: 0 | 1 | -1;
+  /** the latest page turn (a new id replays the leaf shadow); null when motion is off */
+  sweep: { id: number; dir: 1 | -1 } | null;
   dark: boolean;
   onEdge: (dir: 1 | -1) => void;
   labels: { prev: string; next: string };
   children: React.ReactNode;
 }) {
-  // replay the leaf shadow on every turn
-  const [sweep, setSweep] = useState<{ id: number; dir: 1 | -1 } | null>(null);
-  useEffect(() => {
-    if (turnDir !== 0) setSweep((s) => ({ id: (s?.id ?? 0) + 1, dir: turnDir }));
-  }, [turnDir]);
-
   if (!width) return null;
   const edgeMax = 7;
   const leftEdge = Math.max(1, Math.round(fraction * edgeMax));

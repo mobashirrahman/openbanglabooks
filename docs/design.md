@@ -16,8 +16,12 @@ the reader). Everything around them stays quiet.
 | Accent | `--accent` | `#A65D4E` Muted Terracotta | progress, bookmark ribbon. Small text uses `--accent-text` `#8E4C3E` (5.6:1) |
 | Night | dark theme `--bg` | `#202423` Dark Charcoal | dark theme; text `#ECE6DA`, never pure white |
 
+The logo mark on page surfaces uses `--mark` (cloth on paper, foil at night),
+a token rather than a `dark:` class so it is right even when the theme script
+has not run (e.g. a streamed 404, which Next renders on the client).
+
 Tokens are three layers in `src/app/globals.css`: primitives (`--green-800`…),
-semantic (`--bg`, `--fg`, `--cloth`, `--foil`, `--line`…) and the Tailwind
+semantic (`--bg`, `--fg`, `--cloth`, `--foil`, `--mark`, `--line`…) and the Tailwind
 mapping (`bg-cloth`, `text-fg-muted`…). Components use semantic tokens only.
 Dark mode switches the semantic layer via `html[data-theme="dark"]`, set
 before first paint by an inline script (no flash).

@@ -88,9 +88,18 @@ test.describe("public catalog", () => {
     expect((await request.get("/manifest.webmanifest")).status()).toBe(200);
   });
 
-  test("unknown pages return 404", async ({ page }) => {
-    const res = await page.goto("/books/does-not-exist");
-    expect(res?.status()).toBe(404);
+  test("unknown pages return 404 on the first visit", async ({ page }) => {
+    // a fresh slug every run: the first request is the one that must not be a soft 404
+    const id = `${Date.now().toString(36)}${Math.random().toString(36).slice(2, 6)}`;
+    for (const path of [`/books/missing-${id}`, `/authors/missing-${id}`, `/genres/missing-${id}`, `/en/books/missing-${id}`]) {
+      const res = await page.goto(path);
+      expect(res?.status(), path).toBe(404);
+    }
+    await expect(page.getByRole("heading", { level: 1 })).toHaveText("Page not found");
+    // the reader renders per request (CSP nonce), so its 404 streams: branded and noindex
+    await page.goto(`/read/missing-${id}`);
+    await expect(page.getByRole("heading", { level: 1 })).toHaveText("পাতাটি পাওয়া যায়নি");
+    await expect(page.locator('meta[name="robots"]').first()).toHaveAttribute("content", /noindex/);
   });
 
   test("accessibility: no serious or critical axe violations", async ({ page }, info) => {

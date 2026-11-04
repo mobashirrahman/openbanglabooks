@@ -5,7 +5,8 @@ import { mkdirSync } from "node:fs";
 export async function shot(page: Page, info: TestInfo, name: string, fullPage = false) {
   const dir = `test-results/screenshots/${info.project.name}`;
   mkdirSync(dir, { recursive: true });
-  await page.screenshot({ path: `${dir}/${name}.png`, fullPage });
+  // finite CSS animations are fast-forwarded to their end: review shots show the settled UI
+  await page.screenshot({ path: `${dir}/${name}.png`, fullPage, animations: "disabled" });
 }
 
 export async function expectBengaliFonts(page: Page) {
@@ -33,6 +34,25 @@ export async function waitForReader(page: Page) {
   // let the opening transition finish
   await page.waitForTimeout(1200);
   return reader;
+}
+
+/**
+ * Shows the reader controls deterministically: the controls appear when a
+ * book opens and hide themselves after a moment, and Escape toggles them.
+ * Waiting for the first auto-hide means Escape always *shows* them.
+ */
+export async function showControls(page: Page) {
+  const contents = page.getByRole("button", { name: "সূচিপত্র" });
+  await expect(contents).toBeHidden({ timeout: 8_000 });
+  await page.keyboard.press("Escape");
+  await expect(contents).toBeVisible();
+}
+
+/** A point inside the book (fractions of its width/height), not on the desk around it. */
+export async function bookPoint(page: Page, fx: number, fy = 0.5) {
+  const box = await page.locator("foliate-view").boundingBox();
+  if (!box) throw new Error("the book is not rendered");
+  return { x: box.x + box.width * fx, y: box.y + box.height * fy };
 }
 
 export async function readerState(page: Page) {

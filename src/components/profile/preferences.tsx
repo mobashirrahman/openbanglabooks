@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useState, useSyncExternalStore } from "react";
 import { Monitor, Moon, Sun } from "lucide-react";
 import { THEME_STORAGE_KEY } from "@/components/theme/theme-script";
 import { localDB, markHasProgress } from "@/lib/local/db";
@@ -15,19 +15,33 @@ function applyTheme(pref: Theme) {
   document.documentElement.dataset.theme = dark ? "dark" : "light";
 }
 
+// the stored preference is an external store: other tabs change it too
+const THEME_EVENT = "obb:theme-change";
+function readThemePref(): Theme {
+  try {
+    const v = localStorage.getItem(THEME_STORAGE_KEY);
+    return v === "light" || v === "dark" ? v : "system";
+  } catch {
+    return "system";
+  }
+}
+function subscribeThemePref(onChange: () => void) {
+  window.addEventListener("storage", onChange);
+  window.addEventListener(THEME_EVENT, onChange);
+  return () => {
+    window.removeEventListener("storage", onChange);
+    window.removeEventListener(THEME_EVENT, onChange);
+  };
+}
+
 export function ThemePreference({ labels }: { labels: Dictionary["profile"] }) {
-  const [pref, setPref] = useState<Theme>("system");
-  useEffect(() => {
-    try {
-      setPref((localStorage.getItem(THEME_STORAGE_KEY) as Theme) ?? "system");
-    } catch {}
-  }, []);
+  const pref = useSyncExternalStore(subscribeThemePref, readThemePref, () => "system" as Theme);
   const choose = (p: Theme) => {
-    setPref(p);
     try {
       localStorage.setItem(THEME_STORAGE_KEY, p);
     } catch {}
     applyTheme(p);
+    window.dispatchEvent(new Event(THEME_EVENT));
   };
   const options: { value: Theme; label: string; Icon: typeof Sun }[] = [
     { value: "system", label: labels.themeSystem, Icon: Monitor },

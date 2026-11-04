@@ -9,7 +9,7 @@ export function SiteFooter({ locale, dict }: { locale: Locale; dict: Dictionary 
     <footer className="mt-24 border-t border-line bg-sunken/60 pb-24 lg:pb-0">
       <div className="mx-auto grid max-w-7xl gap-10 px-4 py-12 sm:px-6 lg:grid-cols-[1.4fr_1fr_1fr] lg:px-8">
         <div className="max-w-md">
-          <div className="flex items-center gap-3 text-cloth dark:text-foil">
+          <div className="flex items-center gap-3 text-mark">
             <Mark className="size-9" />
             <span className="font-display text-xl">{dict.meta.siteNameLocal}</span>
           </div>

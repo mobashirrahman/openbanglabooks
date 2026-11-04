@@ -9,7 +9,18 @@ maintained, renders reflowable EPUB 2/3 with real pagination, supports
 spreads (`max-column-count`), CFIs, annotation overlays and touch snapping.
 It is not published on npm, so it is a pinned git submodule
 (`vendor/foliate-js`). All access goes through `src/lib/reader/engine.ts`
-so upstream API changes stay contained. We build the book object ourselves
+so upstream API changes stay contained. The submodule is never patched
+(a patched submodule points at a commit upstream does not have); behaviour we
+need to change is handled around it:
+
+- foliate snaps the page on every `touchend`, also after a still tap, and that
+  snap can race the page turn the same tap starts and pull the page back. The
+  adapter keeps a still touch's `touchend` from foliate (`guardTapSnap`).
+- foliate drops a turn requested while one is running (including a chapter
+  load). The reader remembers one such turn and runs it next, so taps are
+  never lost.
+- foliate's page margins live in its shadow DOM, outside the section iframe,
+  so the reader handles taps on the host as well as inside the text. We build the book object ourselves
 (`epub-loader.ts`, fflate), which skips foliate's file sniffing (and its PDF
 path) and lets us sanitise section markup.
 
@@ -48,6 +59,15 @@ the database refuses to publish a work without a recorded rights basis. Pages
 read the catalog with the anon key inside `"use cache"` functions tagged
 `catalog`, so they prerender at build time and refresh via
 `POST /api/revalidate` after ingestion or edits.
+
+Detail pages (`books`, `authors`, `genres`, `collections`) export
+`ensureStatic = "navigation"`. Without it, a slug that was not prerendered is
+served from the fallback shell, the response has already started when the
+page calls `notFound()`, and the first visit is a soft 404 (status 200). With
+it, Next waits for the complete render, so unknown slugs get a real 404 and
+new books (added after a build) are rendered once and then cached. The reader
+is per-request by design (CSP nonce), so its 404 streams: it is branded and
+`noindex`, with status 200.
 
 ## 5. Our own Wikisource → EPUB assembler
 

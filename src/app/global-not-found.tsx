@@ -1,10 +1,11 @@
 import "./globals.css";
 import type { Metadata } from "next";
-import { Mark } from "@/components/brand/logo";
+import { NotFoundView } from "@/components/status/not-found-view";
 import { ThemeScript } from "@/components/theme/theme-script";
+import bn from "@/lib/i18n/dictionaries/bn";
 
 export const metadata: Metadata = {
-  title: "পাতাটি পাওয়া যায়নি | OpenBanglaBooks",
+  title: `${bn.common.notFoundTitle} | ${bn.meta.siteName}`,
   robots: { index: false },
 };
 
@@ -15,21 +16,14 @@ export default function GlobalNotFound() {
       <head>
         <ThemeScript />
       </head>
-      <body className="flex min-h-dvh items-center justify-center bg-bg px-6 text-fg">
-        <main className="max-w-md text-center">
-          <Mark className="mx-auto size-16 text-cloth dark:text-foil" />
-          <h1 className="mt-6 font-display text-3xl">পাতাটি পাওয়া যায়নি</h1>
-          <p className="mt-3 text-fg-muted">ঠিকানাটি হয়তো বদলে গেছে বা ভুল লেখা হয়েছে।</p>
-          <p lang="en" className="mt-1 text-sm text-fg-subtle">
-            This page could not be found.
-          </p>
-          <a
-            href="/"
-            className="mt-8 inline-flex h-11 items-center rounded-control bg-cloth px-5 text-on-cloth hover:bg-cloth-raised"
-          >
-            প্রথম পাতায় যান
-          </a>
-        </main>
+      <body className="bg-bg text-fg">
+        <NotFoundView
+          as="main"
+          title={bn.common.notFoundTitle}
+          body={bn.common.notFoundBody}
+          english="This page could not be found."
+          action={{ href: "/", label: bn.common.goHome }}
+        />
       </body>
     </html>
   );

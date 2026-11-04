@@ -31,6 +31,17 @@ export type ReaderProps = {
 type Phase = "loading" | "ready" | "error" | "offline";
 const MOBILE_MAX = 700;
 
+/** A pointer press on the book: where and when it began, and whether text was selected then. */
+type Press = { x: number; y: number; t: number; selecting: boolean };
+const pressOf = (e: PointerEvent, selecting: boolean): Press => ({ x: e.screenX, y: e.screenY, t: Date.now(), selecting });
+/** Short and still: a tap, not a drag, a swipe or a long press. */
+const isTap = (press: Press | null, e: MouseEvent) =>
+  !press || (Math.hypot(e.screenX - press.x, e.screenY - press.y) <= 10 && Date.now() - press.t <= 500);
+const hasSelection = (doc: Document) => {
+  const sel = doc.getSelection();
+  return Boolean(sel && !sel.isCollapsed && sel.toString().trim());
+};
+
 export function Reader(props: ReaderProps) {
   const { work, fileSha, fileUrl, labels, locale } = props;
   const [settings, updateSettings] = useReaderSettings();
@@ -41,7 +52,8 @@ export function Reader(props: ReaderProps) {
   const [ended, setEnded] = useState(false);
   const [stage, setStage] = useState({ width: 0, height: 0 });
   const [attempt, setAttempt] = useState(0);
-  const [turnDir, setTurnDir] = useState<0 | 1 | -1>(0);
+  // every page turn gets a new id, which replays the leaf shadow
+  const [sweep, setSweep] = useState<{ id: number; dir: 1 | -1 } | null>(null);
 
   const engineRef = useRef<Engine | null>(null);
   const hostRef = useRef<HTMLDivElement>(null);
@@ -100,22 +112,43 @@ export function Reader(props: ReaderProps) {
   const showChrome = useCallback((ms = 2800) => {
     setChrome(true);
     if (hideTimer.current) clearTimeout(hideTimer.current);
-    hideTimer.current = setTimeout(() => setChrome(false), ms);
+    hideTimer.current = setTimeout(() => {
+      // never pull the controls away from under keyboard focus
+      if (document.activeElement?.closest("[data-reader-chrome]")) return;
+      setChrome(false);
+    }, ms);
   }, []);
 
   // ── navigation ────────────────────────────────────────────────────────────
+  // foliate ignores a turn requested while the previous one is still running
+  // (which includes loading the next chapter). A tap must never be lost, so
+  // one turn asked for meanwhile is remembered and runs right after.
+  const turning = useRef(false);
+  const queuedTurn = useRef<0 | 1 | -1>(0);
   const turn = useCallback(
-    async (dir: 1 | -1) => {
+    async function turnPage(dir: 1 | -1): Promise<void> {
       const engine = engineRef.current;
       if (!engine) return;
+      if (turning.current) {
+        queuedTurn.current = dir;
+        return;
+      }
       if (dir === 1 && locationRef.current?.atEnd) {
         setEnded(true);
         flush(true);
         return;
       }
-      setTurnDir(dir);
+      setSweep((s) => ({ id: (s?.id ?? 0) + 1, dir }));
       setChrome(false);
-      await (dir === 1 ? engine.next() : engine.prev());
+      turning.current = true;
+      try {
+        await (dir === 1 ? engine.next() : engine.prev());
+      } finally {
+        turning.current = false;
+      }
+      const queued = queuedTurn.current;
+      queuedTurn.current = 0;
+      if (queued && engineRef.current === engine) await turnPage(queued);
     },
     [flush],
   );
@@ -124,7 +157,6 @@ export function Reader(props: ReaderProps) {
   useEffect(() => {
     let cancelled = false;
     let engine: (Engine & { start(): Promise<void> }) | null = null;
-    setPhase("loading");
     (async () => {
       try {
         const [bytes, saved] = await Promise.all([loadEpubBytes(fileSha, fileUrl), getPosition(work.slug, fileSha)]);
@@ -138,7 +170,6 @@ export function Reader(props: ReaderProps) {
             onRelocate: (r) => {
               locationRef.current = r;
               setLocation(r);
-              setTurnDir(0);
               if (saveTimer.current) clearTimeout(saveTimer.current);
               saveTimer.current = setTimeout(() => flush(), 500);
             },
@@ -237,28 +268,54 @@ export function Reader(props: ReaderProps) {
     if (engineRef.current && phase === "ready") applyPresentation(engineRef.current);
   }, [settings, stage.width, stage.height, phase, applyPresentation]);
 
-  // ── input inside the book (iframe documents) ─────────────────────────────
+  // ── taps on the book ──────────────────────────────────────────────────────
+  // The outer quarters of the book turn pages and the middle toggles the
+  // controls. Taps arrive from two places: the section iframe (the text) and
+  // the host (foliate's page margins live in its shadow DOM, outside the
+  // iframe – on a phone that is exactly where a thumb taps "back").
   const turnRef = useRef(turn);
   turnRef.current = turn;
+  const tapAt = useCallback((clientX: number) => {
+    const rect = hostRef.current?.getBoundingClientRect();
+    if (!rect?.width) return;
+    const x = (clientX - rect.left) / rect.width;
+    if (x < 0.25) void turnRef.current(-1);
+    else if (x > 0.75) void turnRef.current(1);
+    else setChrome((c) => !c);
+  }, []);
+  const anySelection = () => engineRef.current?.contents().some((c) => hasSelection(c.doc)) ?? false;
+  const hostPress = useRef<Press | null>(null);
+  const onHostPointerDown = (e: React.PointerEvent) => {
+    hostPress.current = pressOf(e.nativeEvent, anySelection());
+  };
+  const onHostClick = (e: React.MouseEvent) => {
+    const press = hostPress.current;
+    hostPress.current = null;
+    if (press?.selecting || anySelection()) {
+      // the first tap dismisses the selection (a click outside the frame does not)
+      for (const c of engineRef.current?.contents() ?? []) c.doc.getSelection()?.removeAllRanges();
+      return;
+    }
+    if (isTap(press, e.nativeEvent)) tapAt(e.clientX);
+  };
+
+  // ── input inside the book (iframe documents) ─────────────────────────────
   const attachDocHandlers = useCallback(
     (doc: Document) => {
-      let down: { x: number; y: number; t: number } | null = null;
+      let press: Press | null = null;
+      // the selection is read on pointerdown: by the time `click` fires, the
+      // press itself has already collapsed it
       doc.addEventListener("pointerdown", (e) => {
-        down = { x: e.screenX, y: e.screenY, t: Date.now() };
+        press = pressOf(e, hasSelection(doc));
       });
       doc.addEventListener("click", (e) => {
-        const start = down;
-        down = null;
+        const start = press;
+        press = null;
         if ((e.target as Element | null)?.closest?.("a[href]")) return; // links are handled by the engine
-        const sel = doc.getSelection();
-        if (sel && !sel.isCollapsed && sel.toString().trim()) return; // selecting text, not turning
-        if (start && (Math.hypot(e.screenX - start.x, e.screenY - start.y) > 10 || Date.now() - start.t > 500)) return;
+        if (start?.selecting || hasSelection(doc)) return; // dismissing or making a selection, not turning
+        if (!isTap(start, e)) return;
         const frame = doc.defaultView?.frameElement as HTMLElement | null;
-        const left = (frame?.getBoundingClientRect().left ?? 0) + e.clientX;
-        const w = window.innerWidth;
-        if (left < w * 0.25) void turnRef.current(-1);
-        else if (left > w * 0.75) void turnRef.current(1);
-        else setChrome((c) => !c);
+        tapAt((frame?.getBoundingClientRect().left ?? 0) + e.clientX);
       });
       doc.addEventListener("keydown", (e) => handleKey(e));
       doc.addEventListener("mousemove", () => {
@@ -327,7 +384,6 @@ export function Reader(props: ReaderProps) {
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   // ── bookmarks ─────────────────────────────────────────────────────────────
@@ -414,12 +470,12 @@ export function Reader(props: ReaderProps) {
           columns={columns}
           mobile={mobile}
           fraction={location?.fraction ?? 0}
-          turnDir={reducedMotion || !settings.animations ? 0 : turnDir}
+          sweep={reducedMotion || !settings.animations ? null : sweep}
           dark={settings.theme === "dark"}
           onEdge={(dir) => void turn(dir)}
           labels={{ prev: labels.prevPage, next: labels.nextPage }}
         >
-          <div ref={hostRef} className="absolute inset-0" />
+          <div ref={hostRef} className="absolute inset-0" onPointerDown={onHostPointerDown} onClick={onHostClick} />
         </BookFrame>
       </div>
 
@@ -459,7 +515,10 @@ export function Reader(props: ReaderProps) {
         work={work}
         bookHref={props.bookHref}
         next={props.next}
-        onRetry={() => setAttempt((a) => a + 1)}
+        onRetry={() => {
+          setPhase("loading");
+          setAttempt((a) => a + 1);
+        }}
         onBackToBook={() => setEnded(false)}
       />
     </div>
