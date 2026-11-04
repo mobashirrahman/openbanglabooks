@@ -1,0 +1,5 @@
+allowBuilds:
+  sharp: true
+  unrs-resolver: false
+  supabase: true
+  esbuild: true
