@@ -91,7 +91,7 @@ export function DeviceData({ labels }: { labels: Dictionary["profile"] }) {
   const clearAll = async () => {
     if (!window.confirm(labels.clearConfirm)) return;
     const db = localDB();
-    await Promise.all([db.positions.clear(), db.library.clear(), db.bookmarks.clear(), db.files.clear(), db.settings.clear()]);
+    await Promise.all([db.positions.clear(), db.library.clear(), db.bookmarks.clear(), db.files.clear(), db.settings.clear(), db.annotations.clear(), db.days.clear()]);
     try {
       localStorage.removeItem(READER_SETTINGS_KEY);
     } catch {}

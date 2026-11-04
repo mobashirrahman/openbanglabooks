@@ -58,7 +58,7 @@ export default async function SiteLayout({ children }: LayoutProps<"/[lang]">) {
         <OpenTracker />
         <BottomNav
           locale={locale}
-          labels={{ discover: dict.nav.discover, library: dict.nav.library, profile: dict.nav.profile, mainNav: dict.nav.mainNav }}
+          labels={{ discover: dict.nav.discover, library: dict.nav.library, notes: dict.nav.notes, profile: dict.nav.profile, mainNav: dict.nav.mainNav }}
         />
       </body>
     </html>

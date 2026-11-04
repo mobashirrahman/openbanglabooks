@@ -7,6 +7,8 @@ export type ReaderTheme = "light" | "sepia" | "dark";
 export type ReaderLayout = "auto" | "single" | "spread";
 export type ReaderFlow = "paginated" | "scrolled";
 export type ReaderMargin = "narrow" | "medium" | "wide";
+/** How a page turns: a curling leaf, a slide, a crossfade, or instantly. */
+export type ReaderTurn = "curl" | "slide" | "fade" | "none";
 
 export type ReaderSettings = {
   font: ReaderFont;
@@ -18,7 +20,7 @@ export type ReaderSettings = {
   layout: ReaderLayout;
   flow: ReaderFlow;
   justify: boolean;
-  animations: boolean;
+  turn: ReaderTurn;
 };
 
 export const DEFAULT_SETTINGS: ReaderSettings = {
@@ -30,7 +32,7 @@ export const DEFAULT_SETTINGS: ReaderSettings = {
   layout: "auto",
   flow: "paginated",
   justify: false,
-  animations: true,
+  turn: "curl",
 };
 
 export const FONT_SIZES = [80, 90, 100, 110, 120, 135, 150, 170, 190] as const;
@@ -70,7 +72,8 @@ export function normalizeSettings(input: unknown): ReaderSettings {
     layout: oneOf(s.layout, ["auto", "single", "spread"] as const, DEFAULT_SETTINGS.layout),
     flow: oneOf(s.flow, ["paginated", "scrolled"] as const, DEFAULT_SETTINGS.flow),
     justify: typeof s.justify === "boolean" ? s.justify : DEFAULT_SETTINGS.justify,
-    animations: typeof s.animations === "boolean" ? s.animations : DEFAULT_SETTINGS.animations,
+    // older settings had an on/off switch for page-turn animation
+    turn: oneOf(s.turn, ["curl", "slide", "fade", "none"] as const, (s as { animations?: unknown }).animations === false ? "none" : DEFAULT_SETTINGS.turn),
   };
 }
 

@@ -14,12 +14,14 @@ published, each with its source and rights basis recorded.
 |---|---|
 | Public catalog: home, book, author, genre, collection, browse + filters, search | Done (SSG/PPR, bn + en) |
 | Reader: foliate-js engine, spreads/single page, tap/swipe/keys, TOC, bookmarks, settings, CFI persistence | Done |
-| Signature motion: cover-to-book opening, page-turn leaf shadow, reduced-motion paths | Done |
+| Signature motion: cover-to-book opening, a page curl that follows the finger (slide, fade or instant as options), reduced-motion paths | Done |
+| Highlights in five colours and underline, notes, "আমার নোট" with search, filters and Markdown/JSON export | Done (on this device; sync with accounts in Phase 2) |
+| Search inside a book (Bengali-aware), quote cards to save or share, daily reading goals with streaks, time left in chapter and book | Done |
 | Local library (IndexedDB): continue reading, want-to-read, finished, bookmarks | Done |
 | SEO: metadata, canonical, hreflang, JSON-LD, sitemap, robots, OG images | Done |
 | Security: strict nonce CSP for the reader, EPUB sanitising, RLS everywhere | Done |
 | Content: 14 verified works ingested from Bengali Wikisource | Done |
-| Accounts, sync, highlights/notes, admin UI (Phase 2) | Not started — see [docs/roadmap.md](docs/roadmap.md) |
+| Accounts, sync, shelves, admin UI (Phase 2) | Not started — see [docs/roadmap.md](docs/roadmap.md) |
 | Goodreads/Hardcover/Readwise, personal EPUB import, service worker (Phase 3) | Not started |
 
 ## Stack

@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import { LibraryView } from "@/components/library/library-view";
+import { ReadingGoal } from "@/components/library/reading-goal";
 import { getDictionary, getLocale } from "@/lib/i18n";
 
 export async function generateMetadata(): Promise<Metadata> {
@@ -13,7 +14,10 @@ export default async function LibraryPage() {
   return (
     <div className="mx-auto max-w-6xl px-4 pt-10 sm:px-6 sm:pt-14 lg:px-8">
       <h1 className="text-4xl sm:text-5xl">{dict.library.title}</h1>
-      <p className="mt-2 mb-10 text-fg-muted">{dict.library.description}</p>
+      <p className="mt-2 mb-8 text-fg-muted">{dict.library.description}</p>
+      <div className="mb-12">
+        <ReadingGoal locale={locale} labels={dict.library} />
+      </div>
       <LibraryView
         locale={locale}
         labels={{

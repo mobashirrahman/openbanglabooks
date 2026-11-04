@@ -20,6 +20,9 @@ export function BookFrame({
   dark,
   onEdge,
   labels,
+  pageRef,
+  flapRef,
+  shadeRef,
   children,
 }: {
   width: number;
@@ -32,6 +35,10 @@ export function BookFrame({
   dark: boolean;
   onEdge: (dir: 1 | -1) => void;
   labels: { prev: string; next: string };
+  /** the layers a page curl draws with (see lib/reader/page-curl) */
+  pageRef: React.Ref<HTMLDivElement>;
+  flapRef: React.Ref<HTMLDivElement>;
+  shadeRef: React.Ref<HTMLDivElement>;
   children: React.ReactNode;
 }) {
   if (!width) return null;
@@ -81,6 +88,13 @@ export function BookFrame({
           </>
         ) : null}
 
+        {/* the back of a curling leaf and the shadow it casts: painted beneath the page,
+            seen only while a page-curl transition shows them */}
+        <div ref={flapRef} data-curl-layer aria-hidden className="pointer-events-none absolute inset-0 -z-10" />
+        <div ref={shadeRef} data-curl-layer aria-hidden className="pointer-events-none absolute inset-0 -z-10" />
+
+        {/* the page itself: everything a page curl turns over */}
+        <div ref={pageRef} className={cn("absolute inset-0 overflow-hidden bg-[var(--paper)]", !mobile && "rounded-[3px]")}>
         {children}
 
         {/* gutter: the fold between facing pages */}
@@ -122,6 +136,7 @@ export function BookFrame({
             />
           </div>
         ) : null}
+        </div>
 
         {/* desktop page edges are buttons, too */}
         {!mobile ? (

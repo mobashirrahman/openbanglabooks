@@ -1,18 +1,21 @@
 "use client";
 
 import { useState } from "react";
-import { Dialog } from "radix-ui";
-import { ArrowLeft, Bookmark, BookmarkCheck, List, Minus, Plus, Type, X } from "lucide-react";
-import { chapterLabel, type Relocation, type TocItem } from "@/lib/reader/engine";
-import type { Bookmark as BookmarkRow, WorkSnapshot } from "@/lib/local/db";
+import { ArrowLeft, Bookmark, BookmarkCheck, List, Minus, Plus, Search, Type } from "lucide-react";
+import { chapterLabel, type Relocation, type SearchEvent, type TocItem } from "@/lib/reader/engine";
+import type { Annotation, Bookmark as BookmarkRow, WorkSnapshot } from "@/lib/local/db";
+import { SWATCH } from "@/lib/reader/annotations";
 import { FONTS, THEMES, type ReaderSettings, LINE_HEIGHTS, stepFontSize } from "@/lib/reader/settings";
-import { formatNumber, formatPercent } from "@/lib/i18n/format";
+import { formatDuration, formatNumber, formatPercent } from "@/lib/i18n/format";
 import type { Locale } from "@/lib/i18n/config";
 import type { Dictionary } from "@/lib/i18n/dictionaries/bn";
 import { t } from "@/lib/i18n/t";
 import { cn } from "@/lib/utils";
+import { Sheet } from "./sheet";
+import { SearchSheet } from "./search-sheet";
 
-type Labels = Dictionary["reader"] & { back: string };
+type Labels = Dictionary["reader"] & { back: string; allNotes: string; notesHref: string };
+export type ReaderSheet = null | "toc" | "settings" | "search";
 
 export function ReaderChrome(props: {
   visible: boolean;
@@ -24,16 +27,23 @@ export function ReaderChrome(props: {
   toc: TocItem[];
   sectionFractions: number[];
   bookmarks: BookmarkRow[];
+  annotations: Annotation[];
+  /** estimated seconds left, from the reader's own speed */
+  timeLeft: { chapter: number; book: number } | null;
   bookmarked: boolean;
   onToggleBookmark: () => void;
-  sheet: null | "toc" | "settings";
-  onSheet: (s: null | "toc" | "settings") => void;
+  sheet: ReaderSheet;
+  onSheet: (s: ReaderSheet) => void;
+  /** a search started from a selection (a new `n` starts it afresh) */
+  searchSeed: { q: string; n: number };
+  onSearch: (q: string) => AsyncGenerator<SearchEvent>;
+  onClearSearch: () => void;
   settings: ReaderSettings;
   onSettings: (p: Partial<ReaderSettings>) => void;
   columnsAvailable: boolean;
   onGoTo: (target: string) => void;
   onGoToFraction: (f: number) => void;
-  onPointerActivity: () => void;
+  onPointerActivity: (e: React.PointerEvent) => void;
 }) {
   const { visible, labels, location, locale, work } = props;
   const fraction = location?.fraction ?? 0;
@@ -68,6 +78,9 @@ export function ReaderChrome(props: {
               <p className="truncate text-xs text-[var(--ink-muted)]">{chapterLabel(location.tocLabel, labels.chapterOf)}</p>
             ) : null}
           </div>
+          <button type="button" className={iconBtn} aria-label={labels.search} onClick={() => props.onSheet("search")}>
+            <Search aria-hidden className="size-5" />
+          </button>
           <button type="button" className={iconBtn} aria-label={labels.contents} onClick={() => props.onSheet("toc")}>
             <List aria-hidden className="size-5" />
           </button>
@@ -119,14 +132,23 @@ export function ReaderChrome(props: {
             onCommit={props.onGoToFraction}
             valueText={formatPercent(fraction, locale)}
           />
-          <div className="mt-1 flex items-center justify-between text-xs text-[var(--ink-muted)]">
-            <span>{formatPercent(fraction, locale)}</span>
-            <span>
-              {location
-                ? left > 0
-                  ? t(labels.pagesLeftInChapter, { count: formatNumber(left, locale) })
-                  : labels.lastPageOfChapter
-                : null}
+          <div className="mt-1 flex items-center justify-between gap-4 text-xs text-[var(--ink-muted)]">
+            <span className="flex gap-3">
+              <span>{formatPercent(fraction, locale)}</span>
+              {props.timeLeft && props.timeLeft.book >= 60 ? (
+                <span className="hidden sm:inline">{t(labels.timeLeftBook, { time: formatDuration(props.timeLeft.book, locale) })}</span>
+              ) : null}
+            </span>
+            <span className="text-right">
+              {!location
+                ? null
+                : left <= 0
+                  ? labels.lastPageOfChapter
+                  : props.timeLeft
+                    ? props.timeLeft.chapter < 60
+                      ? labels.chapterAlmostDone
+                      : t(labels.timeLeftChapter, { time: formatDuration(props.timeLeft.chapter, locale) })
+                    : t(labels.pagesLeftInChapter, { count: formatNumber(left, locale) })}
             </span>
           </div>
         </div>
@@ -144,6 +166,17 @@ export function ReaderChrome(props: {
       </div>
 
       <TocSheet {...props} />
+      <SearchSheet
+        key={props.searchSeed.n}
+        open={props.sheet === "search"}
+        onOpenChange={(o) => props.onSheet(o ? "search" : null)}
+        initialQuery={props.searchSeed.q}
+        search={props.onSearch}
+        clear={props.onClearSearch}
+        onGoTo={props.onGoTo}
+        labels={labels}
+        locale={locale}
+      />
       <SettingsSheet {...props} />
     </>
   );
@@ -205,51 +238,9 @@ function ProgressSlider({
   );
 }
 
-function Sheet({
-  open,
-  onOpenChange,
-  title,
-  children,
-  side = "right",
-}: {
-  open: boolean;
-  onOpenChange: (o: boolean) => void;
-  title: string;
-  children: React.ReactNode;
-  side?: "right" | "left";
-}) {
-  return (
-    <Dialog.Root open={open} onOpenChange={onOpenChange}>
-      <Dialog.Portal>
-        <Dialog.Overlay className="fixed inset-0 z-40 bg-black/30 data-[state=open]:animate-in data-[state=open]:fade-in-0 data-[state=closed]:animate-out data-[state=closed]:fade-out-0" />
-        <Dialog.Content
-          className={cn(
-            "fixed inset-x-0 bottom-0 z-50 flex max-h-[82dvh] flex-col rounded-t-[20px] bg-[var(--paper)] text-[var(--ink)] shadow-sheet pb-safe outline-none",
-            "data-[state=open]:animate-in data-[state=open]:slide-in-from-bottom-8 data-[state=open]:fade-in-0 data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=closed]:slide-out-to-bottom-8 duration-300",
-            "sm:inset-y-0 sm:bottom-auto sm:max-h-none sm:w-[24rem] sm:rounded-none",
-            side === "right"
-              ? "sm:right-0 sm:left-auto sm:data-[state=open]:slide-in-from-right-8 sm:data-[state=closed]:slide-out-to-right-8"
-              : "sm:left-0 sm:right-auto sm:data-[state=open]:slide-in-from-left-8 sm:data-[state=closed]:slide-out-to-left-8",
-          )}
-        >
-          <div className="flex items-center justify-between border-b border-[color-mix(in_oklab,var(--ink)_10%,transparent)] px-5 py-3 sm:pt-safe">
-            <Dialog.Title className="font-display text-xl">{title}</Dialog.Title>
-            <Dialog.Close className="inline-flex size-10 items-center justify-center rounded-full hover:bg-[color-mix(in_oklab,var(--ink)_8%,transparent)]">
-              <X aria-hidden className="size-5" />
-              <span className="sr-only">close</span>
-            </Dialog.Close>
-          </div>
-          <Dialog.Description className="sr-only">{title}</Dialog.Description>
-          <div className="overflow-y-auto overscroll-contain">{children}</div>
-        </Dialog.Content>
-      </Dialog.Portal>
-    </Dialog.Root>
-  );
-}
-
 function TocSheet(props: Parameters<typeof ReaderChrome>[0]) {
   const { labels, location, locale } = props;
-  const [tab, setTab] = useState<"toc" | "bookmarks">("toc");
+  const [tab, setTab] = useState<"toc" | "bookmarks" | "highlights">("toc");
   const current = location?.tocHref;
   const item = (it: TocItem, depth: number): React.ReactNode => (
     <li key={it.href + it.label}>
@@ -272,9 +263,9 @@ function TocSheet(props: Parameters<typeof ReaderChrome>[0]) {
     </li>
   );
   return (
-    <Sheet open={props.sheet === "toc"} onOpenChange={(o) => props.onSheet(o ? "toc" : null)} title={labels.contents} side="left">
+    <Sheet open={props.sheet === "toc"} onOpenChange={(o) => props.onSheet(o ? "toc" : null)} title={labels.contents} side="left" closeLabel={labels.closeMenu}>
       <div role="tablist" className="flex gap-1 px-4 pt-3">
-        {(["toc", "bookmarks"] as const).map((k) => (
+        {(["toc", "highlights", "bookmarks"] as const).map((k) => (
           <button
             key={k}
             type="button"
@@ -286,7 +277,11 @@ function TocSheet(props: Parameters<typeof ReaderChrome>[0]) {
               tab === k ? "bg-[var(--ink)] text-[var(--paper)]" : "text-[var(--ink-muted)] hover:text-[var(--ink)]",
             )}
           >
-            {k === "toc" ? labels.contents : `${labels.bookmarks} (${formatNumber(props.bookmarks.length, locale)})`}
+            {k === "toc"
+              ? labels.contents
+              : k === "highlights"
+                ? `${labels.highlights} (${formatNumber(props.annotations.length, locale)})`
+                : `${labels.bookmarks} (${formatNumber(props.bookmarks.length, locale)})`}
           </button>
         ))}
       </div>
@@ -294,6 +289,8 @@ function TocSheet(props: Parameters<typeof ReaderChrome>[0]) {
         <nav aria-label={labels.contents} className="py-2">
           <ul>{props.toc.map((it) => item(it, 0))}</ul>
         </nav>
+      ) : tab === "highlights" ? (
+        <HighlightList {...props} />
       ) : props.bookmarks.length ? (
         <ul className="py-2">
           {props.bookmarks.map((b) => (
@@ -315,6 +312,47 @@ function TocSheet(props: Parameters<typeof ReaderChrome>[0]) {
         <p className="px-5 py-6 text-sm text-[var(--ink-muted)]">{labels.noBookmarks}</p>
       )}
     </Sheet>
+  );
+}
+
+function HighlightList({ annotations, labels, locale, onGoTo }: Parameters<typeof ReaderChrome>[0]) {
+  if (!annotations.length) return <p className="px-5 py-6 text-sm text-[var(--ink-muted)]">{labels.noHighlights}</p>;
+  return (
+    <>
+      <ul className="py-2">
+        {annotations.map((a) => (
+          <li key={a.id}>
+            <button
+              type="button"
+              onClick={() => onGoTo(a.cfi)}
+              className="flex w-full gap-3 px-5 py-3 text-left hover:bg-[color-mix(in_oklab,var(--ink)_6%,transparent)]"
+            >
+              <span
+                aria-hidden
+                className="mt-1 w-[3px] shrink-0 self-stretch rounded-full"
+                style={{ background: a.style === "underline" ? "var(--color-accent)" : SWATCH[a.color] }}
+              />
+              <span className="min-w-0 flex-1">
+                <span className="block text-xs text-[var(--ink-muted)]">
+                  {chapterLabel(a.chapter, labels.chapterOf) ?? ""} {formatPercent(a.fraction, locale)}
+                </span>
+                <span className="mt-0.5 line-clamp-3 block font-read text-[0.95rem]">{a.quote}</span>
+                {a.note ? (
+                  <span className="mt-1.5 line-clamp-3 block border-l border-[color-mix(in_oklab,var(--ink)_25%,transparent)] pl-2 text-sm text-[var(--ink-muted)]">
+                    {a.note}
+                  </span>
+                ) : null}
+              </span>
+            </button>
+          </li>
+        ))}
+      </ul>
+      <p className="px-5 pt-1 pb-5">
+        <a href={labels.notesHref} className="text-sm underline decoration-[var(--color-accent)] underline-offset-4">
+          {labels.allNotes}
+        </a>
+      </p>
+    </>
   );
 }
 
@@ -360,7 +398,7 @@ function Segmented<T extends string | number | boolean>({
 function SettingsSheet(props: Parameters<typeof ReaderChrome>[0]) {
   const { labels, settings: s, onSettings, locale } = props;
   return (
-    <Sheet open={props.sheet === "settings"} onOpenChange={(o) => props.onSheet(o ? "settings" : null)} title={labels.settings}>
+    <Sheet open={props.sheet === "settings"} onOpenChange={(o) => props.onSheet(o ? "settings" : null)} title={labels.settings} closeLabel={labels.closeMenu}>
       <div className="py-2">
         <div className="flex items-center gap-3 px-5 py-3">
           <span className="flex-1 text-sm text-[var(--ink-muted)]">{labels.fontSize}</span>
@@ -448,23 +486,30 @@ function SettingsSheet(props: Parameters<typeof ReaderChrome>[0]) {
           ]}
         />
 
+        {s.flow === "paginated" ? (
+          <Segmented
+            label={labels.animations}
+            value={s.turn}
+            onChange={(turn) => onSettings({ turn })}
+            options={[
+              { value: "curl" as const, label: labels.turnCurl },
+              { value: "slide" as const, label: labels.turnSlide },
+              { value: "fade" as const, label: labels.turnFade },
+              { value: "none" as const, label: labels.turnNone },
+            ]}
+          />
+        ) : null}
+
         <div className="space-y-1 px-5 py-3">
-          {(
-            [
-              ["justify", labels.justify],
-              ["animations", labels.animations],
-            ] as const
-          ).map(([key, label]) => (
-            <label key={key} className="flex min-h-11 cursor-pointer items-center justify-between gap-4">
-              <span className="text-sm">{label}</span>
-              <input
-                type="checkbox"
-                checked={s[key]}
-                onChange={(e) => onSettings({ [key]: e.target.checked })}
-                className="size-5 accent-[var(--color-accent)]"
-              />
-            </label>
-          ))}
+          <label className="flex min-h-11 cursor-pointer items-center justify-between gap-4">
+            <span className="text-sm">{labels.justify}</span>
+            <input
+              type="checkbox"
+              checked={s.justify}
+              onChange={(e) => onSettings({ justify: e.target.checked })}
+              className="size-5 accent-[var(--color-accent)]"
+            />
+          </label>
         </div>
       </div>
     </Sheet>

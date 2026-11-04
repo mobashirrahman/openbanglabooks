@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { Compass, LibraryBig, UserRound } from "lucide-react";
+import { Compass, LibraryBig, NotebookPen, UserRound } from "lucide-react";
 import { cn } from "@/lib/utils";
 import type { Locale } from "@/lib/i18n/config";
 import { NAV_ITEMS, type NavKey, type NavLabels } from "./nav-items";
@@ -10,6 +10,7 @@ import { useBarePathname, useLocalizedHref } from "./use-locale-path";
 const ICONS: Record<NavKey, typeof Compass> = {
   discover: Compass,
   library: LibraryBig,
+  notes: NotebookPen,
   profile: UserRound,
 };
 
@@ -59,7 +60,7 @@ export function BottomNav({ locale, labels }: { locale: Locale; labels: NavLabel
       aria-label={labels.mainNav}
       className="fixed inset-x-0 bottom-0 z-40 border-t border-line bg-surface/95 pb-safe backdrop-blur-sm lg:hidden"
     >
-      <ul className="mx-auto grid max-w-md grid-cols-3">
+      <ul className="mx-auto grid max-w-lg grid-cols-4">
         {NAV_ITEMS.map((item) => {
           const active = item.match(pathname);
           const Icon = ICONS[item.key];

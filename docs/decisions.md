@@ -109,3 +109,44 @@ already has the right theme and size.
 Next.js `output: "standalone"` in a container behind Caddy (automatic TLS),
 Supabase external. HTTPS is required in production (WebCrypto, service
 worker). See `docs/deploy.md`.
+
+## 10. Page curl with View Transitions, in two engine modes
+
+The curl must not re-lay out or distort text, and must look the same with
+highlights, fonts and the night theme. So it never draws text itself: the
+View Transitions API snapshots the outgoing page (exact pixels, iframe
+included) while the page changes underneath, and each frame clips the layers
+to a flat-fold geometry (`src/lib/reader/page-curl.ts`, unit tested): the
+part of the leaf still lying flat, the lifted part showing the page beneath
+with a cast shadow, and the lifted part folded over as shaded paper. Timed
+turns move the corner on an arc; drags put it under the finger and settle
+forward or back on release (distance and speed).
+
+Engines differ in how they show the *incoming* page during a transition, and
+the book lives in an iframe:
+
+- **Blink ("named")**: the page is its own transition layer; its live image
+  includes iframe content.
+- **WebKit ("root")** — Safari and every browser on iPhone and iPad: a named
+  element's live image leaves out iframe content and misses per-frame style
+  changes, but the live document itself shows through wherever the screen
+  snapshot is clipped away. So the screen snapshot is clipped, and the flap
+  and shadow are live elements seen through it. A backward turn on one page
+  peels the current page away (mirrored) instead of swinging the previous one
+  back, because nothing live can be drawn above the snapshot.
+- **Other engines** (not verified): the slide.
+
+Rejected: a WebGL curl (it needs the page as a texture, and there is no API
+to rasterise the live page – a redrawn copy would lose crisp text) and DOM
+clones of the page (a second layout on every turn, with highlights and the
+selection missing from the moving page).
+
+## 11. Bengali-aware search of our own
+
+foliate's search compares runs of grapheme clusters; since ICU 74 a Bengali
+conjunct is one cluster, so text with a ZWNJ inside a conjunct and a query
+without it never line up. `src/lib/reader/book-search.ts` searches a
+normalised copy of each chapter (canonically decomposed, joiners removed,
+lower-cased for Latin) that maps every character back to its DOM position,
+so matches become exact ranges and CFIs. Vowel signs and hasanta always count.
+

@@ -109,9 +109,14 @@ book shadows, not a generic card shadow. No glassmorphism, no gradient washes.
 | press feedback | 120 ms | |
 | hover / toggles | 200 ms | |
 | drawers / sheets | 300–320 ms | |
-| page turn | 420 ms | foliate's slide + a leaf shadow sweeping across the page (transform/opacity only — live text is never distorted) |
+| page turn: curl (default) | 560 ms (340 ms when flipping quickly) | the leaf folds over from the bottom corner with a shaded back and a cast shadow; on touch screens it follows the finger and settles back on a short drag. Text is never re-laid out or distorted: snapshots are only clipped (see decisions §10) |
+| page turn: slide / fade / instant | 420 / 220 / 0 ms | reader settings ("পাতা ওল্টানোর ধরন"); slide is foliate's own motion with a leaf shadow sweeping across the page |
 | book opening | ~420 ms flight + 620 ms hinge | the tapped cover flies to the book's position, waits for the book, then hinges open about its spine; 260 ms on repeat opens in a session |
 
 Easing: "paper" `cubic-bezier(.2,.7,.2,1)`. Every animation has a
-`prefers-reduced-motion` path (crossfade or none), and the reader has an
-animation toggle.
+`prefers-reduced-motion` path (crossfade or none): with reduced motion a page
+turn is a 220 ms fade, whatever the setting.
+
+Highlights: yellow, green, blue, pink, purple and an underline, drawn as soft
+marker strokes over the text (multiply on light pages, screen at night, so
+the ink stays crisp); a note adds a small dot at the end of the passage.

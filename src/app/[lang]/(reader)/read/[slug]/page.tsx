@@ -52,7 +52,15 @@ export default async function ReadPage({ params, searchParams }: PageProps<"/[la
       fileUrl={`/api/books/${work.file.sha256}`}
       bookHref={localizedPath(locale, `/books/${slug}`)}
       locale={locale}
-      labels={{ ...dict.reader, back: dict.actions.back, retry: dict.actions.retry }}
+      labels={{
+        ...dict.reader,
+        back: dict.actions.back,
+        retry: dict.actions.retry,
+        undo: dict.notes.undo,
+        deleted: dict.notes.deleted,
+        allNotes: dict.notes.title,
+        notesHref: localizedPath(locale, "/notes"),
+      }}
       initial={{ href: at, cfi }}
       next={next}
     />

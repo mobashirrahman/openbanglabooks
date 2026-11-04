@@ -34,3 +34,22 @@ const BENGALI_DIGITS = "০১২৩৪৫৬৭৮৯";
 export function toAsciiDigits(s: string): string {
   return s.replace(/[০-৯]/g, (d) => String(BENGALI_DIGITS.indexOf(d)));
 }
+
+/**
+ * A reading-time estimate: "৭ মিনিট", "৩ ঘণ্টা ২০ মিনিট" / "7 min", "3 h 20 min".
+ * Rounded like a person would say it: whole minutes, and steps of five once
+ * it runs to hours.
+ */
+export function formatDuration(seconds: number, locale: Locale): string {
+  const bn = locale === "bn";
+  const n = (x: number) => formatNumber(x, locale);
+  const minutes = Math.round(seconds / 60);
+  if (minutes < 1) return bn ? "১ মিনিটের কম" : "under a minute";
+  if (minutes < 60) return bn ? `${n(minutes)} মিনিট` : `${n(minutes)} min`;
+  const h = Math.floor(minutes / 60);
+  const m = Math.round((minutes % 60) / 5) * 5;
+  const hh = m === 60 ? h + 1 : h;
+  const mm = m === 60 ? 0 : m;
+  if (!mm) return bn ? `${n(hh)} ঘণ্টা` : `${n(hh)} h`;
+  return bn ? `${n(hh)} ঘণ্টা ${n(mm)} মিনিট` : `${n(hh)} h ${n(mm)} min`;
+}

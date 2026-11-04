@@ -17,12 +17,23 @@ Catalog, reader, local library, SEO, brand, deployment files. See the README.
 - **Section-level teardown race in foliate-js:** its ResizeObserver can fire
   while a section iframe is being removed and log an error. Seen only when
   closing a page mid-render; no effect on reading.
+- **Page-curl drags are tested in Chromium only.** Timed curls (taps, keys)
+  are tested in both engines, but Playwright's WebKit cannot create
+  synthetic touch events, so dragging the leaf in Safari has not been
+  exercised automatically. Firefox turns pages with the slide.
 - **No offline app shell yet.** Books you have opened are cached in
   IndexedDB and reopen offline, but the pages around them need a network
   until the service worker lands (Phase 3).
 - **Catalog size.** 14 works. পথের পাঁচালী and দুর্গেশনন্দিনী are waiting for
   Wikisource transcription; Kazi Nazrul Islam is in copyright in BD/IN until
   the end of 2036.
+
+### Done ahead of Phase 2 (on this device, no account needed)
+
+Highlights (five colours, underline) and notes with a "আমার নোট" page,
+search, filters and Markdown/JSON export; search inside a book; quote cards;
+daily reading goals with streaks and time-left estimates; the page curl.
+Everything is stored locally with `updatedAt` on every row, ready for sync.
 
 ## Phase 2 — personal reading
 

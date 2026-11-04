@@ -362,3 +362,91 @@
     padding-top: env(safe-area-inset-top);
   }
 }
+
+/* ── page turns with View Transitions (see src/lib/reader/page-curl.ts) ──────
+   The rest of the screen (desk, controls) never crossfades during a turn. */
+html[data-curl]::view-transition-old(root),
+html[data-fade]::view-transition-old(root) {
+  display: none;
+}
+html[data-curl]::view-transition-new(root),
+html[data-fade]::view-transition-new(root) {
+  animation: none;
+}
+/* curl: script draws every frame (clip paths); this hold keeps the transition
+   alive until the script ends it with skipTransition() */
+html[data-curl]::view-transition-group(obb-page) {
+  animation: obb-hold 60s linear;
+  z-index: 1;
+}
+html[data-curl]::view-transition-group(obb-shade) {
+  animation: none;
+  z-index: 2;
+}
+html[data-curl]::view-transition-group(obb-flap) {
+  animation: none;
+  z-index: 3;
+}
+html[data-curl]::view-transition-old(obb-page),
+html[data-curl]::view-transition-new(obb-page) {
+  animation: none;
+  opacity: 1;
+  mix-blend-mode: normal;
+}
+html[data-curl="old-top"]::view-transition-old(obb-page) {
+  z-index: 1;
+}
+html[data-curl]::view-transition-old(obb-flap),
+html[data-curl]::view-transition-old(obb-shade) {
+  display: none;
+}
+html[data-curl]::view-transition-new(obb-flap),
+html[data-curl]::view-transition-new(obb-shade) {
+  animation: none;
+  opacity: 1;
+}
+@keyframes obb-hold {
+  from {
+    opacity: 1;
+  }
+  to {
+    opacity: 1;
+  }
+}
+/* fade: a short crossfade of the page alone */
+html[data-fade]::view-transition-group(obb-page) {
+  animation: none;
+}
+html[data-fade]::view-transition-old(obb-page),
+html[data-fade]::view-transition-new(obb-page) {
+  animation-duration: 220ms;
+  animation-timing-function: ease-out;
+}
+/* WebKit ("root" mode): the screen snapshot is clipped to the fold and the live
+   document shows through the holes – a named element's live image would leave
+   out the book's iframe there. Later rules: they override the ones above. */
+html[data-curl="root"]::view-transition-group(root) {
+  animation: obb-hold 60s linear;
+}
+html[data-curl="root"]::view-transition-old(root) {
+  display: block;
+  animation: none;
+  opacity: 1;
+}
+html[data-curl="root"]::view-transition-new(root),
+html[data-fade="root"]::view-transition-new(root) {
+  display: none;
+}
+html[data-fade="root"]::view-transition-old(root) {
+  display: block;
+  animation: obb-fade-out 220ms ease-out both;
+}
+@keyframes obb-fade-out {
+  to {
+    opacity: 0;
+  }
+}
+/* root mode: the curl's flap and shade come up above the page (they show through the snapshot's holes) */
+html[data-curl="root"] [data-curl-layer] {
+  z-index: 20;
+}

@@ -4,6 +4,8 @@
  * Adapter around foliate-js (vendor/foliate-js, pinned). The rest of the app
  * talks only to this module, so the unstable upstream API is contained here.
  */
+import { drawMark, drawSearchMark, snapToGraphemes, type MarkStyle } from "./annotations";
+import { findInDocument, normalizeQuery } from "./book-search";
 import { makeLoader } from "./epub-loader";
 import { sanitizeSection } from "./styles";
 
@@ -30,11 +32,17 @@ export type Relocation = {
   atEnd: boolean;
   /** visible text range, for bookmarks and excerpts */
   range: Range | null;
+  /** characters of text after this page: the rest of the chapter, and (estimated) of the book */
+  charsLeft: { chapter: number; book: number } | null;
   reason: string | null;
 };
 
 type FoliateView = HTMLElement & {
-  book: { toc?: TocItem[]; sections: { linear?: string }[]; metadata?: { title?: unknown } };
+  book: {
+    toc?: TocItem[];
+    sections: { linear?: string; size?: number; createDocument?: () => Promise<Document> }[];
+    metadata?: { title?: unknown };
+  };
   renderer: HTMLElement & {
     next(): Promise<void>;
     prev(): Promise<void>;
@@ -43,7 +51,7 @@ type FoliateView = HTMLElement & {
     pages: number;
     atStart: boolean;
     atEnd: boolean;
-    getContents(): { doc: Document; index: number }[];
+    getContents(): { doc: Document; index: number; overlayer?: { hitTest(p: { x: number; y: number }): [string?, Range?] } }[];
   };
   lastLocation?: { cfi: string; range?: Range };
   open(book: unknown): Promise<void>;
@@ -56,6 +64,8 @@ type FoliateView = HTMLElement & {
   getSectionFractions(): number[];
   resolveNavigation(target: string): { index: number; anchor: (doc: Document) => Range | Node } | undefined;
   getCFI(index: number, range?: Range): string;
+  addAnnotation(a: { value: string }, remove?: boolean): Promise<unknown>;
+  deleteAnnotation(a: { value: string }): Promise<unknown>;
 };
 
 /**
@@ -92,7 +102,15 @@ export type EngineCallbacks = {
   onRelocate: (r: Relocation) => void;
   onLoad?: (doc: Document, index: number) => void;
   onExternalLink?: (href: string) => void;
+  /** a highlight was tapped */
+  onShowMark?: (cfi: string) => void;
 };
+
+export type SearchHit = { cfi: string; excerpt: { pre: string; match: string; post: string } };
+export type SearchEvent =
+  | { kind: "progress"; progress: number }
+  | { kind: "results"; label: string; hits: SearchHit[] }
+  | { kind: "done" };
 
 export type Engine = {
   toc: TocItem[];
@@ -115,30 +133,81 @@ export type Engine = {
   contents(): { doc: Document; index: number }[];
   /** Resolves a CFI to a DOM range if its section is currently rendered */
   rangeFor(cfi: string): Range | null;
+  /**
+   * Highlights to draw, keyed by range CFI. Marks are drawn in every rendered
+   * section and redrawn whenever a section (re)loads.
+   */
+  setMarks(marks: Map<string, MarkStyle>): void;
+  /** The current non-empty text selection inside the book, if any. */
+  selection(): { range: Range; cfi: string; doc: Document } | null;
+  /** On-screen rectangles (viewport coordinates) of a range: first and last visible line. */
+  screenRects(range: Range): { first: DOMRect; last: DOMRect } | null;
+  /**
+   * Searches the whole book, chapter by chapter. Bengali-aware: matching
+   * ignores zero-width joiners and treats canonically equivalent spellings
+   * (য় as one code point or two) as equal, but vowel signs always count.
+   * Matches are outlined in the text; `clearSearch` removes them.
+   */
+  search(query: string): AsyncGenerator<SearchEvent>;
+  clearSearch(): void;
+  /** True when a point (in a section document's coordinates) lands on a highlight. */
+  hitsMark(doc: Document, x: number, y: number): boolean;
+  /** Takes over touches on the book (page-curl drags), or gives them back to foliate (null). */
+  setTouchHandler(h: TouchHandler | null): void;
   element: HTMLElement;
   destroy(): void;
 };
 
+export type TouchPhase = "start" | "move" | "end";
+/** Receives every touch on the book in page-viewport coordinates; returns true to keep it from foliate. */
+export type TouchHandler = (phase: TouchPhase, point: { x: number; y: number }, e: TouchEvent) => boolean;
+
 /**
- * foliate snaps the page into place on every `touchend` – after a swipe, but
- * also after a tap that never scrolled anything. That snap animation runs
- * alongside the page turn the same tap triggers; when it finishes last it
- * pulls the page back and the tap is lost. A touch that never moved needs no
- * snapping, so its `touchend` is kept from foliate (capture phase, before
- * foliate's own listeners). Swipes pass through untouched.
+ * Routes touches on the book (in capture phase, before foliate's own listeners).
+ *
+ * - With a handler (the page-curl mode), the handler decides; what it takes,
+ *   foliate never sees, so foliate's own swipe never runs.
+ * - Otherwise: foliate snaps the page into place on every `touchend` – after a
+ *   swipe, but also after a tap that never scrolled anything. That snap runs
+ *   alongside the page turn the same tap triggers; when it finishes last it
+ *   pulls the page back and the tap is lost. A touch that never moved needs
+ *   no snapping, so its `touchend` is kept from foliate. Swipes pass through.
  */
-function guardTapSnap(target: EventTarget) {
+function routeTouches(target: EventTarget, handler: () => TouchHandler | null) {
   let moved = false;
-  const opts = { capture: true, passive: true } as const;
-  target.addEventListener("touchstart", () => {
-    moved = false;
-  }, opts);
-  target.addEventListener("touchmove", () => {
-    moved = true;
-  }, opts);
-  target.addEventListener("touchend", (e) => {
-    if (!moved) e.stopPropagation();
-  }, opts);
+  // touches inside a section iframe report iframe coordinates
+  const pointOf = (e: TouchEvent) => {
+    const t = e.changedTouches[0];
+    const frame = (target as Window).frameElement as HTMLElement | null | undefined;
+    const off = frame ? frame.getBoundingClientRect() : { left: 0, top: 0 };
+    return { x: (t?.clientX ?? 0) + off.left, y: (t?.clientY ?? 0) + off.top };
+  };
+  target.addEventListener(
+    "touchstart",
+    (e) => {
+      moved = false;
+      if (handler()?.("start", pointOf(e as TouchEvent), e as TouchEvent)) e.stopPropagation();
+    },
+    { capture: true, passive: true },
+  );
+  target.addEventListener(
+    "touchmove",
+    (e) => {
+      moved = true;
+      // (a handler dragging the page calls preventDefault itself; a text selection must stay native)
+      if (handler()?.("move", pointOf(e as TouchEvent), e as TouchEvent)) e.stopPropagation();
+    },
+    { capture: true, passive: false },
+  );
+  for (const type of ["touchend", "touchcancel"])
+    target.addEventListener(
+      type,
+      (e) => {
+        const taken = handler()?.("end", pointOf(e as TouchEvent), e as TouchEvent);
+        if (taken || !moved) e.stopPropagation();
+      },
+      { capture: true, passive: true },
+    );
 }
 
 let foliateLoaded: Promise<unknown> | null = null;
@@ -170,8 +239,57 @@ export async function createEngine(
 
   const view = document.createElement("foliate-view") as FoliateView;
   view.style.cssText = "display:block;width:100%;height:100%";
-  guardTapSnap(view); // the page margins (foliate's shadow DOM)
+  let touchHandler: TouchHandler | null = null;
+  routeTouches(view, () => touchHandler); // the page margins (foliate's shadow DOM)
   container.append(view);
+
+  // characters per byte of section markup, learnt from opened chapters (Bengali UTF-8 is ~3 bytes a letter)
+  const sectionChars = new Map<number, number>();
+  const charsPerByte = () => {
+    let chars = 0;
+    let bytes = 0;
+    for (const [i, c] of sectionChars) {
+      const size = book.sections[i]?.size ?? 0;
+      if (c > 1500 && size) {
+        chars += c;
+        bytes += size;
+      }
+    }
+    return bytes ? chars / bytes : 0.28;
+  };
+  const textLength = (r: Range) => r.toString().replace(/\s+/g, " ").trim().length;
+  /**
+   * Characters of text after `range`: exact for the rest of its chapter, an
+   * estimate for the rest of the book (from chapter sizes, using the
+   * characters-per-byte ratio of chapters already opened).
+   */
+  const textLeft = (range: Range, index: number): { chapter: number; book: number } | null => {
+    const doc = range.endContainer.ownerDocument;
+    const body = doc?.body;
+    if (!doc || !body) return null;
+    // only from the document actually rendered for that section (not a stale one mid-transition)
+    if (!view.renderer.getContents().some((c) => c.index === index && c.doc === doc)) return null;
+    try {
+      if (!sectionChars.has(index)) {
+        const all = doc.createRange();
+        all.selectNodeContents(body);
+        const chars = textLength(all);
+        const size = book.sections[index]?.size ?? 0;
+        // text can never outweigh its own UTF-8 bytes plus markup: anything else is a bad sample
+        if (!size || chars / size < 0.6) sectionChars.set(index, chars);
+      }
+      const after = doc.createRange();
+      after.setStart(range.endContainer, range.endOffset);
+      after.setEnd(body, body.childNodes.length);
+      const chapter = textLength(after);
+      let restBytes = 0;
+      for (let i = index + 1; i < book.sections.length; i++)
+        if (book.sections[i].linear !== "no") restBytes += book.sections[i].size ?? 0;
+      return { chapter, book: chapter + Math.round(restBytes * charsPerByte()) };
+    } catch {
+      return null;
+    }
+  };
 
   view.addEventListener("relocate", (e) => {
     const d = (e as CustomEvent).detail as {
@@ -210,11 +328,12 @@ export async function createEngine(
       atEnd: r.atEnd,
       range: d.range ?? null,
       reason: d.reason ?? null,
+      charsLeft: d.range && d.section ? textLeft(d.range, d.section.current) : null,
     });
   });
   view.addEventListener("load", (e) => {
     const { doc, index } = (e as CustomEvent<{ doc: Document; index: number }>).detail;
-    if (doc.defaultView) guardTapSnap(doc.defaultView); // the text (section iframe)
+    if (doc.defaultView) routeTouches(doc.defaultView, () => touchHandler); // the text (section iframe)
     callbacks.onLoad?.(doc, index);
   });
   view.addEventListener("external-link", (e) => {
@@ -223,9 +342,66 @@ export async function createEngine(
     callbacks.onExternalLink?.(href_ ?? a.href);
   });
 
+  // ── highlights ─────────────────────────────────────────────────────────────
+  let marks = new Map<string, MarkStyle>();
+  // search matches, outlined until the search changes (highlights win where both exist)
+  const searchMarks = new Set<string>();
+  const sectionOf = (cfi: string) => {
+    try {
+      return view.resolveNavigation(cfi)?.index ?? -1;
+    } catch {
+      return -1;
+    }
+  };
+  view.addEventListener("draw-annotation", (e) => {
+    type Draw = <O>(f: (rects: DOMRectList, options: O) => SVGElement, options: O) => void;
+    const { draw, annotation } = (e as CustomEvent<{ draw: Draw; annotation: { value: string } }>).detail;
+    const mark = marks.get(annotation.value);
+    if (mark) draw(drawMark, mark);
+    else if (searchMarks.has(annotation.value)) draw(drawSearchMark, undefined);
+  });
+  // a section was (re)rendered: draw the marks that belong to it
+  view.addEventListener("create-overlay", (e) => {
+    const { index } = (e as CustomEvent<{ index: number }>).detail;
+    for (const cfi of new Set([...marks.keys(), ...searchMarks])) if (sectionOf(cfi) === index) void view.addAnnotation({ value: cfi });
+  });
+  view.addEventListener("show-annotation", (e) => {
+    const { value } = (e as CustomEvent<{ value: string }>).detail;
+    if (marks.has(value)) callbacks.onShowMark?.(value);
+  });
+
   await view.open(book);
   const r = view.renderer;
   r.setAttribute("exportparts", "head,foot,filter");
+
+
+  const clearSearchMarks = () => {
+    const old = [...searchMarks];
+    searchMarks.clear();
+    // a highlight on the same text is drawn again; everything else goes
+    for (const cfi of old) void (marks.has(cfi) ? view.addAnnotation({ value: cfi }) : view.deleteAnnotation({ value: cfi }));
+  };
+  // the chapter name for each section (sections without their own entry inherit the previous one)
+  let labelCache: string[] | null = null;
+  const sectionLabels = () => {
+    if (labelCache) return labelCache;
+    const bySection = new Map<number, string>();
+    const walk = (items: TocItem[]) => {
+      for (const it of items) {
+        try {
+          const i = view.resolveNavigation(it.href)?.index;
+          if (i != null && !bySection.has(i)) bySection.set(i, it.label?.trim() ?? "");
+        } catch {
+          /* unresolvable entry */
+        }
+        if (it.subitems?.length) walk(it.subitems);
+      }
+    };
+    walk(book.toc ?? []);
+    let last = "";
+    labelCache = book.sections.map((_, i) => (last = bySection.get(i) ?? last));
+    return labelCache;
+  };
 
   const engine: Engine = {
     toc: (book.toc ?? []) as TocItem[],
@@ -254,13 +430,86 @@ export async function createEngine(
         const content = r.getContents().find((c) => c.index === resolved.index);
         if (!content) return null;
         const a = resolved.anchor(content.doc);
-        if (a instanceof Range) return a;
+        // not `instanceof Range`: the range comes from the section iframe, whose Range is a different constructor
+        if (a && "startContainer" in a) return a as Range;
         const range = content.doc.createRange();
         range.selectNode(a as Node);
         return range;
       } catch {
         return null;
       }
+    },
+    setMarks: (next) => {
+      const prev = marks;
+      marks = new Map(next);
+      for (const cfi of prev.keys()) if (!marks.has(cfi)) void view.deleteAnnotation({ value: cfi });
+      for (const [cfi, m] of marks) {
+        const old = prev.get(cfi);
+        if (!old || old.color !== m.color || old.style !== m.style || old.note !== m.note) void view.addAnnotation({ value: cfi });
+      }
+    },
+    selection: () => {
+      for (const c of r.getContents()) {
+        const sel = c.doc.getSelection();
+        if (!sel || sel.isCollapsed || !sel.rangeCount || !sel.toString().trim()) continue;
+        // a copy (the selection's own range is live), widened to whole letters
+        const range = snapToGraphemes(sel.getRangeAt(0).cloneRange());
+        try {
+          return { range, doc: c.doc, cfi: view.getCFI(c.index, range) };
+        } catch {
+          return null;
+        }
+      }
+      return null;
+    },
+    screenRects: (range) => {
+      const frame = range.startContainer.ownerDocument?.defaultView?.frameElement as HTMLElement | null;
+      if (!frame) return null;
+      const f = frame.getBoundingClientRect();
+      // in paginated mode a range can run across columns that are off screen
+      const rects = Array.from(range.getClientRects())
+        .map((x) => new DOMRect(x.left + f.left, x.top + f.top, x.width, x.height))
+        .filter((x) => x.width > 0 && x.right > 0 && x.left < window.innerWidth && x.bottom > 0 && x.top < window.innerHeight);
+      if (!rects.length) return null;
+      return { first: rects[0], last: rects[rects.length - 1] };
+    },
+    async *search(query) {
+      clearSearchMarks();
+      const needle = normalizeQuery(query);
+      if (!needle) return;
+      const labels = sectionLabels();
+      const { sections } = book;
+      for (let index = 0; index < sections.length; index++) {
+        const section = sections[index];
+        if (section.createDocument && section.linear !== "no") {
+          let doc: Document | null = null;
+          try {
+            doc = await section.createDocument();
+          } catch {
+            doc = null; // an unreadable chapter: search the rest
+          }
+          const found = doc ? findInDocument(doc, needle) : [];
+          if (found.length) {
+            const hits = found.map((f) => ({ cfi: view.getCFI(index, f.range), excerpt: f.excerpt }));
+            for (const h of hits) {
+              searchMarks.add(h.cfi);
+              void view.addAnnotation({ value: h.cfi });
+            }
+            yield { kind: "results", label: labels[index] ?? "", hits };
+          }
+        }
+        yield { kind: "progress", progress: (index + 1) / sections.length };
+      }
+      yield { kind: "done" };
+    },
+    clearSearch: () => clearSearchMarks(),
+    setTouchHandler: (h) => {
+      touchHandler = h;
+    },
+    hitsMark: (doc, x, y) => {
+      const c = r.getContents().find((c) => c.doc === doc);
+      const [value] = c?.overlayer?.hitTest({ x, y }) ?? [];
+      return Boolean(value && marks.has(value));
     },
     element: view,
     destroy: () => {

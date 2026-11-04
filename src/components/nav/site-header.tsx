@@ -25,7 +25,7 @@ export function SiteHeader({ locale, dict }: { locale: Locale; dict: Dictionary 
         <div className="ml-4 hidden lg:block">
           <HeaderNav
             locale={locale}
-            labels={{ discover: dict.nav.discover, library: dict.nav.library, profile: dict.nav.profile, mainNav: dict.nav.mainNav }}
+            labels={{ discover: dict.nav.discover, library: dict.nav.library, notes: dict.nav.notes, profile: dict.nav.profile, mainNav: dict.nav.mainNav }}
           />
         </div>
         <div className="ml-auto flex items-center gap-1 sm:gap-2">

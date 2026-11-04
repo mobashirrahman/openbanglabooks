@@ -7,15 +7,25 @@ import { createEngine, type Engine, type Relocation } from "@/lib/reader/engine"
 import { loadEpubBytes, OfflineError } from "@/lib/reader/epub-loader";
 import { columnsFor, frameSize, pageGeometry } from "@/lib/reader/layout";
 import { installFontFaces, readerCss } from "@/lib/reader/styles";
-import { THEMES } from "@/lib/reader/settings";
+import { THEMES, type ReaderTurn } from "@/lib/reader/settings";
+import { curlSupported, fadeTurn, startCurl } from "@/lib/reader/page-curl";
+import type { TouchHandler } from "@/lib/reader/engine";
 import { useReaderSettings } from "@/lib/reader/use-reader-settings";
 import { addBookmark, getPosition, savePosition, touchOpened } from "@/lib/reader/persistence";
 import type { Locale } from "@/lib/i18n/config";
 import type { Dictionary } from "@/lib/i18n/dictionaries/bn";
-import { ReaderChrome } from "./reader-chrome";
+import { ReaderChrome, type ReaderSheet } from "./reader-chrome";
+import { menuButtonClass } from "./highlight-menu";
+import { Image as ImageIcon, Search } from "lucide-react";
+import { QuoteCardDialog, type QuoteTarget } from "./quote-card-dialog";
 import { BookFrame } from "./book-frame";
 import { ReaderStatus } from "./reader-status";
 import { OpeningCover } from "./opening-cover";
+import { useHighlights } from "./use-highlights";
+import { useReadingTime } from "./use-reading-time";
+import { t } from "@/lib/i18n/t";
+import { formatNumber } from "@/lib/i18n/format";
+import { applyHighlightTheme } from "@/lib/reader/annotations";
 
 export type ReaderProps = {
   work: WorkSnapshot & { title_en: string };
@@ -23,7 +33,7 @@ export type ReaderProps = {
   fileUrl: string;
   bookHref: string;
   locale: Locale;
-  labels: Dictionary["reader"] & { back: string; retry: string };
+  labels: Dictionary["reader"] & { back: string; retry: string; undo: string; deleted: string; allNotes: string; notesHref: string };
   initial: { href?: string | null; cfi?: string | null };
   next: { slug: string; title_bn: string; href: string }[];
 };
@@ -37,6 +47,19 @@ const pressOf = (e: PointerEvent, selecting: boolean): Press => ({ x: e.screenX,
 /** Short and still: a tap, not a drag, a swipe or a long press. */
 const isTap = (press: Press | null, e: MouseEvent) =>
   !press || (Math.hypot(e.screenX - press.x, e.screenY - press.y) <= 10 && Date.now() - press.t <= 500);
+/**
+ * True for a pointer that really moved on screen. When content slides or fades
+ * under a resting mouse (a page turn, controls hiding), browsers send
+ * mousemove events with an unchanged screen position: those must not wake the
+ * controls, or they would reappear on every turn.
+ */
+let lastPointer = { x: NaN, y: NaN };
+function pointerReallyMoved(e: { screenX: number; screenY: number }) {
+  const moved = Math.abs(e.screenX - lastPointer.x) + Math.abs(e.screenY - lastPointer.y) > 2;
+  lastPointer = { x: e.screenX, y: e.screenY };
+  return moved && window.matchMedia("(hover: hover)").matches;
+}
+
 const hasSelection = (doc: Document) => {
   const sel = doc.getSelection();
   return Boolean(sel && !sel.isCollapsed && sel.toString().trim());
@@ -48,7 +71,9 @@ export function Reader(props: ReaderProps) {
   const [phase, setPhase] = useState<Phase>("loading");
   const [location, setLocation] = useState<Relocation | null>(null);
   const [chrome, setChrome] = useState(true);
-  const [sheet, setSheet] = useState<null | "toc" | "settings">(null);
+  const [sheet, setSheet] = useState<ReaderSheet>(null);
+  const [searchSeed, setSearchSeed] = useState({ q: "", n: 0 });
+  const [quoteTarget, setQuoteTarget] = useState<QuoteTarget | null>(null);
   const [ended, setEnded] = useState(false);
   const [stage, setStage] = useState({ width: 0, height: 0 });
   const [attempt, setAttempt] = useState(0);
@@ -68,6 +93,65 @@ export function Reader(props: ReaderProps) {
   const lastCss = useRef("");
   const settingsRef = useRef(settings);
   settingsRef.current = settings;
+  const columnsRef = useRef<1 | 2>(1);
+
+  // ── highlights and notes ──────────────────────────────────────────────────
+  const hl = useHighlights({
+    engineRef,
+    locationRef,
+    work,
+    fileSha,
+    ready: phase === "ready",
+    labels,
+    menuExtra: ({ quote }) =>
+      quote ? (
+        <>
+          {/* a short selection can be looked up in the whole book */}
+          {quote.length <= 40 ? (
+            <button
+              type="button"
+              aria-label={labels.search}
+              className={menuButtonClass}
+              onClick={() => {
+                setSearchSeed((s) => ({ q: quote, n: s.n + 1 }));
+                setSheet("search");
+                hlRef.current.closeMenu();
+              }}
+            >
+              <Search aria-hidden className="size-[18px]" />
+            </button>
+          ) : null}
+          <button
+            type="button"
+            aria-label={labels.shareQuote}
+            className={menuButtonClass}
+            onClick={() => {
+              setQuoteTarget({
+                quote,
+                title: work.title_bn,
+                author: work.authors[0]?.name_bn ?? "",
+                variant: work.cover_variant,
+                slug: work.slug,
+              });
+              hlRef.current.closeMenu();
+            }}
+          >
+            <ImageIcon aria-hidden className="size-[18px]" />
+          </button>
+        </>
+      ) : null,
+  });
+  const hlRef = useRef(hl);
+  hlRef.current = hl;
+
+  // ── reading time: daily goal, and the time left in chapter and book ───────
+  const reading = useReadingTime({
+    location,
+    active: phase === "ready" && !ended,
+    onGoalReached: (minutes) => hl.say(t(labels.goalReached, { minutes: formatNumber(minutes, locale) })),
+  });
+  const bumpRef = useRef(reading.bump);
+  bumpRef.current = reading.bump;
 
   const reducedMotion = useMemo(
     () => typeof window !== "undefined" && matchMedia("(prefers-reduced-motion: reduce)").matches,
@@ -77,6 +161,7 @@ export function Reader(props: ReaderProps) {
   const theme = THEMES[settings.theme];
   const mobile = stage.width > 0 && stage.width < MOBILE_MAX;
   const columns = mobile ? 1 : columnsFor(stage.width, stage.height, settings.layout);
+  columnsRef.current = columns;
 
   // ── stage size ────────────────────────────────────────────────────────────
   useLayoutEffect(() => {
@@ -119,6 +204,30 @@ export function Reader(props: ReaderProps) {
     }, ms);
   }, []);
 
+  // ── how pages turn ────────────────────────────────────────────────────────
+  const pageRef = useRef<HTMLDivElement>(null);
+  const flapRef = useRef<HTMLDivElement>(null);
+  const shadeRef = useRef<HTMLDivElement>(null);
+  const lastTurnEnd = useRef(0);
+  const turnStyle = useCallback((): ReaderTurn => {
+    const s = settingsRef.current;
+    if (s.flow === "scrolled" || s.turn === "none") return "none";
+    if (reducedMotion) return "fade"; // never a moving page for reduced motion
+    if ((s.turn === "curl" || s.turn === "fade") && !curlSupported()) return "slide";
+    return s.turn;
+  }, [reducedMotion]);
+  const curlSetup = () => {
+    const page = pageRef.current;
+    const flap = flapRef.current;
+    const shade = shadeRef.current;
+    if (!page || !flap || !shade) return null;
+    return {
+      els: { page, flap, shade },
+      layout: { box: { w: page.clientWidth, h: page.clientHeight }, spread: columnsRef.current === 2 },
+      paper: THEMES[settingsRef.current.theme].paper,
+    };
+  };
+
   // ── navigation ────────────────────────────────────────────────────────────
   // foliate ignores a turn requested while the previous one is still running
   // (which includes loading the next chapter). A tap must never be lost, so
@@ -138,20 +247,96 @@ export function Reader(props: ReaderProps) {
         flush(true);
         return;
       }
-      setSweep((s) => ({ id: (s?.id ?? 0) + 1, dir }));
+      const style = turnStyle();
+      if (style === "slide") setSweep((s) => ({ id: (s?.id ?? 0) + 1, dir }));
       setChrome(false);
+      hlRef.current.closeMenu();
       turning.current = true;
       try {
-        await (dir === 1 ? engine.next() : engine.prev());
+        const go = () => (dir === 1 ? engine.next() : engine.prev());
+        const curl = style === "curl" ? curlSetup() : null;
+        if (curl) {
+          // flipping quickly through pages: shorter curls
+          const quick = Date.now() - lastTurnEnd.current < 400;
+          await startCurl({ ...curl, dir, change: go, revert: () => (dir === 1 ? engine.prev() : engine.next()), duration: quick ? 340 : 560 })
+            .done;
+        } else if (style === "fade" && pageRef.current) await fadeTurn(pageRef.current, go);
+        else await go(); // slide: foliate animates; none: instant
       } finally {
         turning.current = false;
+        lastTurnEnd.current = Date.now();
       }
       const queued = queuedTurn.current;
       queuedTurn.current = 0;
       if (queued && engineRef.current === engine) await turnPage(queued);
     },
-    [flush],
+    [flush, turnStyle],
   );
+
+  // ── page-curl drags: on touch screens the leaf follows the finger ────────
+  const drag = useRef<{ start: { x: number; y: number }; t: number; turn: ReturnType<typeof startCurl> | null; blocked: boolean } | null>(null);
+  const onTouch: TouchHandler = (phase, pt, e) => {
+    if (turnStyle() !== "curl") return false; // foliate's own swipe (slide) or none
+    if (phase === "start") {
+      if (e.touches.length > 1) return (drag.current = null), false; // pinch zoom is not ours
+      drag.current = { start: pt, t: Date.now(), turn: null, blocked: turning.current };
+      return true;
+    }
+    const d = drag.current;
+    if (!d) return phase === "move";
+    if (phase === "end") {
+      clearTimeout(dragWatchdog.current);
+      void d.turn?.release();
+      drag.current = null;
+      return true;
+    }
+    if (e.touches.length > 1) return (drag.current = null), false;
+    if (d.blocked) return true;
+    if (!d.turn) {
+      const dx = pt.x - d.start.x;
+      const dy = pt.y - d.start.y;
+      if (Math.abs(dx) < 14 || Math.abs(dx) < Math.abs(dy) * 1.2) return true;
+      // a long press is selecting text, not turning the page
+      if (Date.now() - d.t > 450 || anySelection()) return (d.blocked = true), true;
+      const dir: 1 | -1 = dx < 0 ? 1 : -1;
+      const loc = locationRef.current;
+      const engine = engineRef.current;
+      const curl = curlSetup();
+      if ((dir === 1 && loc?.atEnd) || (dir === -1 && loc?.atStart) || !engine || !curl) return (d.blocked = true), true;
+      const r = curl.els.page.getBoundingClientRect();
+      setChrome(false);
+      hlRef.current.closeMenu();
+      turning.current = true;
+      d.turn = startCurl({
+        ...curl,
+        dir,
+        change: () => (dir === 1 ? engine.next() : engine.prev()),
+        revert: () => (dir === 1 ? engine.prev() : engine.next()),
+        drag: { start: [d.start.x - r.left, d.start.y - r.top] },
+      });
+      void d.turn.done.finally(() => {
+        turning.current = false;
+        lastTurnEnd.current = Date.now();
+      });
+    }
+    if (e.cancelable) e.preventDefault(); // the page follows the finger instead of the view scrolling
+    const r = pageRef.current!.getBoundingClientRect();
+    d.turn.moveTo([pt.x - r.left, pt.y - r.top]);
+    // if the finger's frame goes away (the turn crossed into a new chapter, whose iframe
+    // replaced the one the touch began in), its remaining events never arrive: let go
+    clearTimeout(dragWatchdog.current);
+    const turnNow = d.turn;
+    dragWatchdog.current = setTimeout(() => {
+      if (drag.current?.turn === turnNow) {
+        void turnNow.release();
+        drag.current = null;
+      }
+    }, 1200);
+    return true;
+  };
+  const dragWatchdog = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
+  const touchRef = useRef(onTouch);
+  touchRef.current = onTouch;
 
   // ── open the book ─────────────────────────────────────────────────────────
   useEffect(() => {
@@ -177,6 +362,7 @@ export function Reader(props: ReaderProps) {
               installFontFaces(doc, window.location.origin);
               attachDocHandlers(doc);
             },
+            onShowMark: (cfi) => hlRef.current.showMark(cfi),
           },
         );
         if (cancelled) {
@@ -184,6 +370,7 @@ export function Reader(props: ReaderProps) {
           return;
         }
         engineRef.current = engine;
+        engine.setTouchHandler((phase, pt, e) => touchRef.current(phase, pt, e));
         lastLayout.current = "";
         lastCss.current = "";
         applyPresentation(engine);
@@ -230,7 +417,7 @@ export function Reader(props: ReaderProps) {
         maxInlineSize: `${Math.ceil(frame.width / cols) + 4}px`,
         maxBlockSize: `${frame.height}px`,
         maxColumnCount: cols,
-        animated: s.animations && !reducedMotion,
+        animated: s.turn === "slide" && !reducedMotion, // foliate's own slide; other styles turn instantly underneath
       };
       // every layout attribute change re-renders the section; only touch what changed
       const layoutKey = JSON.stringify(layout);
@@ -238,6 +425,7 @@ export function Reader(props: ReaderProps) {
       const layoutChanged = layoutKey !== lastLayout.current;
       const cssChanged = css !== lastCss.current;
       if (!layoutChanged && !cssChanged) return;
+      hlRef.current.closeMenu(); // its anchor moves with the text
       // remember where the reader is *before* reflowing (positions are CFIs, never pages)
       const anchor = restoring.current ?? locationRef.current?.cfi ?? null;
       if (layoutChanged) {
@@ -285,7 +473,37 @@ export function Reader(props: ReaderProps) {
     else if (x > 0.75) void turnRef.current(1);
     else setChrome((c) => !c);
   }, []);
+  // While a page turn's transition is on screen its overlay takes every tap, so the
+  // tap lands on <html> instead of the book (and WebKit sends no click for it at
+  // all). Someone flipping quickly taps again before the leaf has settled: those
+  // taps still turn pages, read from pointerdown/pointerup.
+  useEffect(() => {
+    let press: Press | null = null;
+    const turning = () => {
+      const d = document.documentElement.dataset;
+      return d.curl !== undefined || d.fade !== undefined;
+    };
+    const onDown = (e: PointerEvent) => {
+      press = e.target === document.documentElement && turning() ? pressOf(e, false) : null;
+    };
+    const onUp = (e: PointerEvent) => {
+      const start = press;
+      press = null;
+      if (!start || e.target !== document.documentElement || !isTap(start, e)) return;
+      // the same rule as on the book itself: with text selected, a tap only dismisses it
+      if (anySelectionRef.current()) for (const c of engineRef.current?.contents() ?? []) c.doc.getSelection()?.removeAllRanges();
+      else tapAt(e.clientX);
+    };
+    document.addEventListener("pointerdown", onDown, true);
+    document.addEventListener("pointerup", onUp, true);
+    return () => {
+      document.removeEventListener("pointerdown", onDown, true);
+      document.removeEventListener("pointerup", onUp, true);
+    };
+  }, [tapAt]);
   const anySelection = () => engineRef.current?.contents().some((c) => hasSelection(c.doc)) ?? false;
+  const anySelectionRef = useRef(anySelection);
+  anySelectionRef.current = anySelection;
   const hostPress = useRef<Press | null>(null);
   const onHostPointerDown = (e: React.PointerEvent) => {
     hostPress.current = pressOf(e.nativeEvent, anySelection());
@@ -294,6 +512,7 @@ export function Reader(props: ReaderProps) {
     const press = hostPress.current;
     hostPress.current = null;
     if ((e.target as Element).closest("button, a")) return; // the desk's own controls
+    if (hlRef.current.isOpen()) return hlRef.current.closeMenu(); // the first tap closes the highlight menu
     if (press?.selecting || anySelection()) {
       // the first tap dismisses the selection (a click outside the frame does not)
       for (const c of engineRef.current?.contents() ?? []) c.doc.getSelection()?.removeAllRanges();
@@ -310,19 +529,28 @@ export function Reader(props: ReaderProps) {
       // press itself has already collapsed it
       doc.addEventListener("pointerdown", (e) => {
         press = pressOf(e, hasSelection(doc));
+        bumpRef.current(); // reading, not away
       });
       doc.addEventListener("click", (e) => {
         const start = press;
         press = null;
         if ((e.target as Element | null)?.closest?.("a[href]")) return; // links are handled by the engine
         if (start?.selecting || hasSelection(doc)) return; // dismissing or making a selection, not turning
+        if (engineRef.current?.hitsMark(doc, e.clientX, e.clientY)) return; // a highlight: the engine opens its menu
+        if (hlRef.current.isOpen()) return hlRef.current.closeMenu();
         if (!isTap(start, e)) return;
         const frame = doc.defaultView?.frameElement as HTMLElement | null;
         tapAt((frame?.getBoundingClientRect().left ?? 0) + e.clientX);
       });
+      // a selection opens the highlight menu once it settles (touch handles keep adjusting it)
+      let selTimer: ReturnType<typeof setTimeout> | undefined;
+      doc.addEventListener("selectionchange", () => {
+        clearTimeout(selTimer);
+        selTimer = setTimeout(() => hlRef.current.checkSelection(), 220);
+      });
       doc.addEventListener("keydown", (e) => handleKey(e));
-      doc.addEventListener("mousemove", () => {
-        if (window.matchMedia("(hover: hover)").matches) showChromeRef.current();
+      doc.addEventListener("mousemove", (e) => {
+        if (pointerReallyMoved(e)) showChromeRef.current();
       });
       doc.addEventListener(
         "wheel",
@@ -351,8 +579,15 @@ export function Reader(props: ReaderProps) {
 
   const sheetRef = useRef(sheet);
   sheetRef.current = sheet;
+  const quoteRef = useRef(quoteTarget);
+  quoteRef.current = quoteTarget;
   function handleKey(e: KeyboardEvent) {
-    if (sheetRef.current) return;
+    if (sheetRef.current || hlRef.current.isEditing() || quoteRef.current) return;
+    if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === "f") {
+      e.preventDefault(); // the book's own search, which also looks in chapters not yet on screen
+      setSheet("search");
+      return;
+    }
     if (e.metaKey || e.ctrlKey || e.altKey) return;
     switch (e.key) {
       case "ArrowRight":
@@ -369,24 +604,43 @@ export function Reader(props: ReaderProps) {
         e.preventDefault();
         void turnRef.current(-1);
         break;
+      case "/":
+        e.preventDefault();
+        setSheet("search");
+        break;
       case "t":
       case "T":
         setSheet("toc");
         break;
       case "Escape":
-        setChrome((c) => !c);
+        if (hlRef.current.isOpen()) {
+          hlRef.current.closeMenu();
+          for (const c of engineRef.current?.contents() ?? []) c.doc.getSelection()?.removeAllRanges();
+        } else setChrome((c) => !c);
         break;
     }
   }
   useEffect(() => {
+    // Who owns a key is decided when it goes down (capture phase, before any dialog
+    // reacts): Escape that closes a sheet must not also toggle the controls – by the
+    // time it bubbles here the sheet has already closed itself.
+    let dialogOwnsKey = false;
+    const onKeyCapture = () => {
+      dialogOwnsKey = Boolean(sheetRef.current || hlRef.current.isEditing() || quoteRef.current || document.querySelector('[role="dialog"][data-state="open"]'));
+    };
     const onKey = (e: KeyboardEvent) => {
+      if (dialogOwnsKey) return;
       const el = e.target as HTMLElement;
       if (/^(INPUT|TEXTAREA|SELECT|BUTTON)$/.test(el.tagName) && e.key === " ") return;
-      if (el.tagName === "INPUT") return;
+      if (el.isContentEditable || /^(INPUT|TEXTAREA|SELECT)$/.test(el.tagName)) return; // typing, not reading
       handleKey(e);
     };
+    window.addEventListener("keydown", onKeyCapture, true);
     window.addEventListener("keydown", onKey);
-    return () => window.removeEventListener("keydown", onKey);
+    return () => {
+      window.removeEventListener("keydown", onKeyCapture, true);
+      window.removeEventListener("keydown", onKey);
+    };
   }, []);
 
   // ── bookmarks ─────────────────────────────────────────────────────────────
@@ -402,9 +656,10 @@ export function Reader(props: ReaderProps) {
         const r = engineRef.current!.rangeFor(b.cfi);
         if (!r || r.startContainer.ownerDocument !== location.range!.startContainer.ownerDocument) return false;
         try {
+          // the bookmark starts on this page: page start ≤ bookmark start ≤ page end
           return (
             location.range!.compareBoundaryPoints(Range.START_TO_START, r) <= 0 &&
-            location.range!.compareBoundaryPoints(Range.END_TO_START, r) >= 0
+            location.range!.compareBoundaryPoints(Range.START_TO_END, r) >= 0
           );
         } catch {
           return false;
@@ -427,8 +682,11 @@ export function Reader(props: ReaderProps) {
   const goTo = useCallback(async (target: string) => {
     setSheet(null);
     setEnded(false);
+    hlRef.current.closeMenu();
     await engineRef.current?.goTo(target);
   }, []);
+  const searchBook = useCallback((q: string) => engineRef.current!.search(q), []);
+  const clearSearch = useCallback(() => engineRef.current?.clearSearch(), []);
   const goToFraction = useCallback(async (f: number) => {
     setEnded(false);
     await engineRef.current?.goToFraction(f);
@@ -446,6 +704,7 @@ export function Reader(props: ReaderProps) {
     root.background = theme.desk;
     document.documentElement.dataset.readerTheme = settings.theme;
     document.documentElement.dataset.theme = settings.theme === "dark" ? "dark" : "light";
+    applyHighlightTheme(document.documentElement, settings.theme === "dark");
   }, [theme, settings.theme]);
 
   return (
@@ -457,6 +716,7 @@ export function Reader(props: ReaderProps) {
       data-cfi={location?.cfi}
       data-fraction={location ? location.fraction.toFixed(4) : undefined}
       data-section={location?.sectionIndex}
+      data-chars-left={location?.charsLeft ? `${location.charsLeft.chapter},${location.charsLeft.book}` : undefined}
       data-visible={location?.range ? location.range.toString().replace(/\s+/g, " ").trim().slice(0, 3000) : undefined}
       style={
         {
@@ -478,7 +738,10 @@ export function Reader(props: ReaderProps) {
           columns={columns}
           mobile={mobile}
           fraction={location?.fraction ?? 0}
-          sweep={reducedMotion || !settings.animations ? null : sweep}
+          sweep={reducedMotion || settings.turn !== "slide" ? null : sweep}
+          pageRef={pageRef}
+          flapRef={flapRef}
+          shadeRef={shadeRef}
           dark={settings.theme === "dark"}
           onEdge={(dir) => void turn(dir)}
           labels={{ prev: labels.prevPage, next: labels.nextPage }}
@@ -498,19 +761,26 @@ export function Reader(props: ReaderProps) {
           toc={engineRef.current?.toc ?? []}
           sectionFractions={engineRef.current?.sectionFractions ?? []}
           bookmarks={bookmarks ?? []}
+          annotations={hl.annotations}
+          timeLeft={reading.timeLeft}
           bookmarked={Boolean(currentBookmark)}
           onToggleBookmark={toggleBookmark}
           sheet={sheet}
           onSheet={setSheet}
+          searchSeed={searchSeed}
+          onSearch={searchBook}
+          onClearSearch={clearSearch}
           settings={settings}
           onSettings={updateSettings}
           columnsAvailable={!mobile && columnsFor(stage.width, stage.height, "spread") === 2}
           onGoTo={goTo}
           onGoToFraction={goToFraction}
-          onPointerActivity={() => showChrome(4000)}
+          onPointerActivity={(e) => pointerReallyMoved(e) && showChrome(4000)}
         />
       ) : null}
 
+      {phase === "ready" ? hl.element : null}
+      <QuoteCardDialog target={quoteTarget} labels={labels} onClose={() => setQuoteTarget(null)} />
       <OpeningCover work={work} ready={phase === "ready"} reducedMotion={reducedMotion} />
       <p role="status" className="sr-only">
         {phase === "loading" ? labels.loading : null}

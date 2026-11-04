@@ -26,7 +26,9 @@ async function turnAndWait(page: Page, input: () => Promise<void>) {
   const before = (await readerState(page)).cfi;
   await input();
   await expect.poll(async () => (await readerState(page)).cfi, { timeout: 10_000 }).not.toBe(before);
-  await page.waitForTimeout(450); // let the slide settle before reading the page
+  // the turn's motion (a curl or fade transition) is over before the page is read or touched
+  await expect.poll(() => page.evaluate(() => document.documentElement.dataset.curl ?? document.documentElement.dataset.fade ?? ""), { timeout: 10_000 }).toBe("");
+  await page.waitForTimeout(250);
 }
 
 test.describe("reader", () => {
@@ -189,6 +191,23 @@ test.describe("reader", () => {
     await shot(page, info, "reader-end");
     await page.goto("/library");
     await expect(page.getByRole("heading", { name: "পড়া শেষ" })).toBeVisible();
+  });
+
+  test("a bookmarked page shows as bookmarked, also when you come back to it", async ({ page }, info) => {
+    const mobile = Boolean(info.project.use.isMobile);
+    await openReader(page);
+    await next(page, mobile);
+    await next(page, mobile);
+    await showControls(page);
+    await page.getByRole("button", { name: "বুকমার্ক করুন" }).click();
+    await expect(page.getByRole("button", { name: "বুকমার্ক সরান" })).toHaveAttribute("aria-pressed", "true");
+    await next(page, mobile); // a page without the bookmark
+    await showControls(page);
+    await expect(page.getByRole("button", { name: "বুকমার্ক করুন" })).toHaveAttribute("aria-pressed", "false");
+    await page.keyboard.press("Escape");
+    await turnAndWait(page, () => page.keyboard.press("ArrowLeft"));
+    await showControls(page);
+    await expect(page.getByRole("button", { name: "বুকমার্ক সরান" })).toHaveAttribute("aria-pressed", "true");
   });
 
   test("an opened book is kept on the device for offline reading", async ({ page }) => {

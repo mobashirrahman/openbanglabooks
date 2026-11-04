@@ -1,5 +1,6 @@
 import type { CSSProperties } from "react";
 import { cn } from "@/lib/utils";
+import { CLOTHS } from "./cloths";
 
 /**
  * Original cloth-bound covers, generated from a work's metadata.
@@ -12,14 +13,7 @@ import { cn } from "@/lib/utils";
  * surrounding markup always carries the accessible title.
  */
 
-const CLOTHS = [
-  { cloth: "#233B30", foil: "#C9A971" }, // forest
-  { cloth: "#6B3328", foil: "#D7B27A" }, // madder
-  { cloth: "#26324A", foil: "#C9A971" }, // indigo
-  { cloth: "#A27A43", foil: "#2A2117" }, // turmeric, ink-stamped
-  { cloth: "#2C302E", foil: "#C2A06C" }, // charcoal
-  { cloth: "#4D2A34", foil: "#D2AE78" }, // lac
-] as const;
+
 
 /** Title centre (top %), author baseline (bottom %) and left inset per motif. */
 const LAYOUT = [
@@ -30,6 +24,7 @@ const LAYOUT = [
   { title: 45, author: 9, left: 24 },
   { title: 60, author: 6, left: 22 },
 ] as const;
+
 
 export type CoverWork = {
   slug: string;
