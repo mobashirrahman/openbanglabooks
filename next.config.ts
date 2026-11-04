@@ -16,6 +16,10 @@ const nextConfig: NextConfig = {
   allowedDevOrigins: (process.env.DEV_ORIGINS ?? "").split(",").map((h) => h.trim()).filter(Boolean),
   experimental: {
     globalNotFound: true,
+    // gentler prerendering for small self-hosted machines: fewer concurrent
+    // catalog queries, and a retry if a cached query is slow under load
+    staticGenerationMaxConcurrency: 4,
+    staticGenerationRetryCount: 2,
   },
   turbopack: {
     rules: {
