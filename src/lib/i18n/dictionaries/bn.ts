@@ -37,7 +37,7 @@ const bn = {
     clearFilters: "ফিল্টার মুছুন",
   },
   home: {
-    featured: "এই সপ্তাহের বই",
+    featured: "সম্পাদকের পছন্দ",
     continueReading: "যেখানে থেমেছিলেন",
     recentlyAdded: "নতুন যুক্ত হয়েছে",
     genres: "ধরন অনুযায়ী",

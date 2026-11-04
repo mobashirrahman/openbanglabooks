@@ -293,6 +293,48 @@
   }
 }
 
+/* Page turn: a soft leaf shadow travels across the page (transform + opacity only). */
+@keyframes leaf-sweep-next {
+  0% { transform: translateX(170%); opacity: 0; }
+  25% { opacity: 1; }
+  100% { transform: translateX(-110%); opacity: 0; }
+}
+@keyframes leaf-sweep-prev {
+  0% { transform: translateX(-110%) scaleX(-1); opacity: 0; }
+  25% { opacity: 1; }
+  100% { transform: translateX(170%) scaleX(-1); opacity: 0; }
+}
+.leaf-sweep { will-change: transform, opacity; left: 0; }
+.leaf-sweep-next { animation: leaf-sweep-next 420ms var(--ease-paper) both; }
+.leaf-sweep-prev { animation: leaf-sweep-prev 420ms var(--ease-paper) both; }
+@media (prefers-reduced-motion: reduce) {
+  .leaf-sweep { display: none; }
+}
+
+/* reader progress slider: our own track, a paper thumb ringed in accent */
+.reader-range::-webkit-slider-runnable-track { background: transparent; height: 2rem; }
+.reader-range::-moz-range-track { background: transparent; }
+.reader-range::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 18px;
+  height: 18px;
+  margin-top: 7px;
+  border-radius: 9999px;
+  background: var(--paper);
+  border: 2px solid var(--color-accent);
+  box-shadow: 0 1px 4px rgb(0 0 0 / 0.25);
+}
+.reader-range::-moz-range-thumb {
+  width: 16px;
+  height: 16px;
+  border-radius: 9999px;
+  background: var(--paper);
+  border: 2px solid var(--color-accent);
+}
+.reader-range:focus-visible { outline: none; }
+.reader-range:focus-visible::-webkit-slider-thumb { outline: 2px solid var(--ink); outline-offset: 2px; }
+
 @layer utilities {
   /* horizontal shelves: native momentum scroll with snap, no visible scrollbar on touch */
   .shelf-scroll {
@@ -303,6 +345,11 @@
   }
   .shelf-scroll::-webkit-scrollbar {
     display: none;
+  }
+  /* Continue Reading reserves its space before hydration when local progress exists */
+  html[data-reading] .continue-slot.hidden {
+    display: block;
+    min-height: 9.5rem;
   }
   .pb-safe {
     padding-bottom: env(safe-area-inset-bottom);

@@ -39,7 +39,7 @@ const en: Dictionary = {
     clearFilters: "Clear filters",
   },
   home: {
-    featured: "Book of the week",
+    featured: "Editor's pick",
     continueReading: "Where you left off",
     recentlyAdded: "Recently added",
     genres: "Browse by form",

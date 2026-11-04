@@ -73,7 +73,8 @@ const uuidFrom = (s: string) => {
   const h = createHash("sha1").update(`openbanglabooks:${s}`).digest("hex");
   return `${h.slice(0, 8)}-${h.slice(8, 12)}-5${h.slice(13, 16)}-a${h.slice(17, 20)}-${h.slice(20, 32)}`;
 };
-const variantFor = (slug: string) => parseInt(createHash("sha1").update(slug).digest("hex").slice(0, 6), 16) % COVER_VARIANTS;
+/** Covers vary by catalog order (cloth = v % 6, motif shifts every 6), so new works continue the sequence. */
+const variantFor = (index: number) => index % (COVER_VARIANTS * COVER_VARIANTS);
 const periodFor = (year: number) => (year < 1901 ? "19th-century" : "early-20th-century");
 
 function stripTags(s: string) {
@@ -88,8 +89,12 @@ function firstLine(xhtml: string): string | null {
   return line ? (line.length > 48 ? line.slice(0, 46).trimEnd() + "…" : line) : null;
 }
 
-function excerptOf(text: string, max = 340): string {
-  const t = text.replace(/\s+/g, " ").trim();
+/** Opening lines: the first real paragraphs, skipping section numerals and headings. */
+function excerptOf(xhtml: string, max = 340): string {
+  const paragraphs = [...xhtml.replace(/^[\s\S]*?<\/h2>/, "").matchAll(/<p[^>]*>([\s\S]*?)<\/p>/g)]
+    .map((m) => stripTags(m[1].replace(/<br\/>/g, " ")).replace(/\s+/g, " ").trim())
+    .filter((p) => p.length >= 25);
+  const t = paragraphs.join(" ");
   if (t.length <= max) return t;
   const cut = t.slice(0, max);
   const end = Math.max(cut.lastIndexOf("।"), cut.lastIndexOf("?"), cut.lastIndexOf("!"));
@@ -172,7 +177,7 @@ async function main() {
       const label = w.poem_labels ? `${c.label}. ${firstLine(xhtml) ?? ""}`.trim() : c.label;
       return { id: `c${String(i + 1).padStart(3, "0")}`, label, part: c.part, xhtml };
     });
-    const firstText = cleanChapter(src.chapters[0].page.html, src.chapters[0].label).text;
+    const firstXhtml = cleanChapter(src.chapters[0].page.html, src.chapters[0].label).xhtml;
     const edition = editionFrom(src.index);
     const sourceUrl = titleUrl(src.rootTitle);
     const { bytes, sha256, toc } = buildEpub(
@@ -236,7 +241,7 @@ async function main() {
         rights_verified_by: manifest.reviewed.by,
         rights_verified_at: reviewedAt,
         featured_rank: w.featured_rank ?? null,
-        cover_variant: variantFor(w.slug),
+        cover_variant: variantFor(manifest.works.indexOf(w)),
       },
       "slug",
     );
@@ -267,7 +272,7 @@ async function main() {
       license_url: LICENSE_URL,
       attribution: `Text transcribed and proofread by Wikisource contributors (${sourceUrl}).`,
       toc,
-      excerpt_bn: excerptOf(firstText),
+      excerpt_bn: excerptOf(firstXhtml),
       chapter_count: chapters.length,
       is_primary: true,
       status: "published",
@@ -300,6 +305,20 @@ async function main() {
     if (ids.length) await supabase.from("authors").update({ status: "published" }).in("id", ids);
   }
   console.log("\n\n" + summary.join("\n"));
+
+  // tell a running site to refresh its cached catalog (no-op if none is running)
+  if (!args.dry && process.env.REVALIDATE_SECRET) {
+    const site = process.env.REVALIDATE_URL ?? process.env.NEXT_PUBLIC_SITE_URL ?? "http://localhost:3000";
+    try {
+      const res = await fetch(`${site}/api/revalidate`, {
+        method: "POST",
+        headers: { Authorization: `Bearer ${process.env.REVALIDATE_SECRET}` },
+      });
+      console.log(`revalidate ${site}: ${res.status}`);
+    } catch {
+      console.log(`revalidate ${site}: site not reachable (pages refresh on next build)`);
+    }
+  }
 }
 
 main().catch((e) => {

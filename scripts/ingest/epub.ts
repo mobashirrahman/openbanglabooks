@@ -87,7 +87,7 @@ export function buildEpub(meta: EpubMeta, chapters: EpubChapter[]): { bytes: Uin
   const add = (path: string, content: string) => (files[path] = strToU8(content));
 
   // title page
-  const editionLine = [meta.publisher, meta.editionYear ? `${bnDigits(meta.editionYear)} সংস্করণ` : undefined]
+  const editionLine = [meta.publisher, meta.editionYear ? `${bnDigits(meta.editionYear)} মুদ্রণ` : undefined]
     .filter(Boolean)
     .join(", ");
   add(

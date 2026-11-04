@@ -1,0 +1,28 @@
+import type { Metadata } from "next";
+import { LibraryView } from "@/components/library/library-view";
+import { getDictionary, getLocale } from "@/lib/i18n";
+
+export async function generateMetadata(): Promise<Metadata> {
+  const dict = await getDictionary();
+  return { title: dict.library.title, robots: { index: false, follow: false } };
+}
+
+export default async function LibraryPage() {
+  const locale = await getLocale();
+  const dict = await getDictionary(locale);
+  return (
+    <div className="mx-auto max-w-6xl px-4 pt-10 sm:px-6 sm:pt-14 lg:px-8">
+      <h1 className="text-4xl sm:text-5xl">{dict.library.title}</h1>
+      <p className="mt-2 mb-10 text-fg-muted">{dict.library.description}</p>
+      <LibraryView
+        locale={locale}
+        labels={{
+          ...dict.library,
+          want: locale === "bn" ? "পরে পড়ব" : "Want to read",
+          remove: dict.actions.removeFromLibrary,
+          continueReading: dict.actions.continueReading,
+        }}
+      />
+    </div>
+  );
+}
