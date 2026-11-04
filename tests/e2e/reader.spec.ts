@@ -1,6 +1,6 @@
 import { expect, test, type Page } from "@playwright/test";
 import { strToU8, zipSync } from "fflate";
-import { bookPoint, clearLocalData, readerState, shot, showControls, waitForReader } from "./helpers";
+import { bookPoint, clearLocalData, readerState, shot, showControls, viewportOf, waitForReader } from "./helpers";
 
 const BOOK = "devdas";
 
@@ -52,7 +52,7 @@ test.describe("reader", () => {
   });
 
   test("two facing pages show consecutive, different text", async ({ page }, info) => {
-    test.skip(info.project.name !== "laptop-1440" && info.project.name !== "desktop-1920", "spread is a desktop layout");
+    test.skip(!["laptop-1440", "desktop-1920"].includes(viewportOf(info)), "spread is a desktop layout");
     await openReader(page);
     await page.keyboard.press("ArrowRight");
     await page.waitForTimeout(700);
@@ -161,7 +161,7 @@ test.describe("reader", () => {
   });
 
   test("resizing switches between one page and a spread", async ({ page }, info) => {
-    test.skip(info.project.name !== "desktop-1920", "desktop resize");
+    test.skip(viewportOf(info) !== "desktop-1920", "desktop resize");
     await openReader(page);
     expect((await readerState(page)).columns).toBe(2);
     await page.setViewportSize({ width: 820, height: 1000 });
@@ -171,7 +171,7 @@ test.describe("reader", () => {
   });
 
   test("a book can be read through to the end", async ({ page }, info) => {
-    test.skip(!["mobile-390", "desktop-1920"].includes(info.project.name), "long test: two viewports");
+    test.skip(!["mobile-390", "desktop-1920"].includes(viewportOf(info)), "long test: two viewports");
     await openReader(page, "/read/bardidi");
     // jump close to the end with the progress slider, then turn pages to the last one
     await showControls(page);
@@ -189,6 +189,26 @@ test.describe("reader", () => {
     await shot(page, info, "reader-end");
     await page.goto("/library");
     await expect(page.getByRole("heading", { name: "পড়া শেষ" })).toBeVisible();
+  });
+
+  test("an opened book is kept on the device for offline reading", async ({ page }) => {
+    await openReader(page);
+    const cachedFiles = () =>
+      page.evaluate(
+        () =>
+          new Promise<number>((resolve) => {
+            const open = indexedDB.open("openbanglabooks");
+            open.onerror = () => resolve(-1);
+            open.onsuccess = () => {
+              const db = open.result;
+              const req = db.transaction("files").objectStore("files").count();
+              req.onsuccess = () => (db.close(), resolve(req.result));
+              req.onerror = () => (db.close(), resolve(-1));
+            };
+          }),
+      );
+    // WebKit cannot store Blobs in private sessions; the cache must still work there
+    await expect.poll(cachedFiles, { timeout: 5_000 }).toBe(1);
   });
 
   test("respects reduced motion", async ({ page }) => {
@@ -218,7 +238,7 @@ test.describe("reader", () => {
   });
 
   test("security: a hostile EPUB renders without running its scripts", async ({ page }, info) => {
-    test.skip(info.project.name !== "laptop-1440", "one viewport is enough");
+    test.skip(viewportOf(info) !== "laptop-1440", "one viewport is enough");
     let sha = "";
     page.on("request", (r) => {
       const m = r.url().match(/\/api\/books\/([0-9a-f]{64})/);
@@ -261,7 +281,7 @@ test.describe("reader", () => {
             tx.objectStore("positions").clear();
             tx.objectStore("files").put({
               sha256: sha,
-              blob: new Blob([new Uint8Array(bytes)], { type: "application/epub+zip" }),
+              data: new Uint8Array(bytes).buffer, // the cache format (ArrayBuffer: works in Safari private mode)
               bytes: bytes.length,
               cachedAt: Date.now(),
             });

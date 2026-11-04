@@ -30,7 +30,11 @@ foliate renders sections in same-origin `blob:` iframes with
 `sandbox="allow-same-origin allow-scripts"` (needed for events in WebKit), so
 the sandbox does not contain scripts. Blob documents inherit the CSP of the
 document that created them. The reader therefore runs under a strict
-`script-src 'nonce-…' 'strict-dynamic'` policy (`src/proxy.ts`).
+`script-src 'nonce-…' 'strict-dynamic'` policy (`src/proxy.ts`). Its
+`frame-ancestors` is `'self'`, not `'none'`: WebKit applies the inherited
+`frame-ancestors` to the blob: chapter frames themselves, and with `'none'`
+Safari refuses to load the book. `'self'` still blocks framing by any other
+site.
 
 CSP is per document, so the reader must always be a fresh document: it has
 its **own root layout** (`app/[lang]/(reader)`), and navigation between root

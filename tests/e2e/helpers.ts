@@ -1,6 +1,9 @@
 import { expect, type Page, type TestInfo } from "@playwright/test";
 import { mkdirSync } from "node:fs";
 
+/** The viewport a project emulates ("mobile-390"…): the same in every browser engine. */
+export const viewportOf = (info: TestInfo) => String(info.project.metadata?.viewport ?? info.project.name);
+
 /** Saves a screenshot for visual review under test-results/screenshots/<project>/. */
 export async function shot(page: Page, info: TestInfo, name: string, fullPage = false) {
   const dir = `test-results/screenshots/${info.project.name}`;

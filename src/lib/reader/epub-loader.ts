@@ -14,7 +14,8 @@ export class BookFileError extends Error {}
 export async function loadEpubBytes(sha256: string, url: string): Promise<Uint8Array> {
   const db = localDB();
   const cached = await db.files.get(sha256).catch(() => undefined);
-  if (cached) return new Uint8Array(await cached.blob.arrayBuffer());
+  if (cached?.data) return new Uint8Array(cached.data);
+  if (cached?.blob) return new Uint8Array(await cached.blob.arrayBuffer());
   let res: Response;
   try {
     res = await fetch(url);
@@ -31,8 +32,9 @@ export async function loadEpubBytes(sha256: string, url: string): Promise<Uint8A
     const hex = [...digest].map((b) => b.toString(16).padStart(2, "0")).join("");
     if (hex !== sha256) throw new BookFileError("checksum mismatch");
   }
+  const data = bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength) as ArrayBuffer;
   db.files
-    .put({ sha256, blob: new Blob([bytes], { type: "application/epub+zip" }), bytes: bytes.byteLength, cachedAt: Date.now() })
+    .put({ sha256, data, bytes: bytes.byteLength, cachedAt: Date.now() })
     .catch(() => {
       /* storage full or unavailable: reading still works, just not offline */
     });

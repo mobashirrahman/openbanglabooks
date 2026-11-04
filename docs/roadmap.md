@@ -6,10 +6,11 @@ Catalog, reader, local library, SEO, brand, deployment files. See the README.
 
 ### Known limitations
 
-- **WebKit / iOS Safari** has not been tested: Playwright's WebKit needs
-  system libraries that require `sudo` on the development server. Run the
-  suite in the official Playwright Docker image, or install the
-  dependencies with `sudo pnpm exec playwright install-deps webkit`.
+- **Safari is tested through WebKit, not on a physical iPhone.** The suite
+  runs in Playwright's WebKit with iPhone, iPad and desktop Safari profiles
+  (see the README). Things only a real device shows (the iOS keyboard,
+  Safari's collapsing toolbars while scrolling, memory limits on old phones)
+  still need a check on hardware before launch.
 - **Reflow keeps your place on the page, not at its top.** After a size or
   layout change the first word you were reading stays on screen, but the
   page is re-cut, so it may sit lower on the page (as in Apple Books).

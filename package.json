@@ -12,6 +12,7 @@
     "test": "vitest run",
     "test:watch": "vitest",
     "test:e2e": "playwright test",
+    "test:e2e:webkit": "playwright test --project='webkit-*'",
     "db:start": "supabase start -x imgproxy,studio,edge-runtime,logflare,vector,realtime,supavisor,postgres-meta",
     "db:stop": "supabase stop",
     "db:reset": "supabase db reset",

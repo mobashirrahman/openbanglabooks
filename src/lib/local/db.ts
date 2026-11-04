@@ -51,7 +51,12 @@ export type Bookmark = {
   work: WorkSnapshot;
 };
 
-export type CachedFile = { sha256: string; blob: Blob; bytes: number; cachedAt: number };
+/**
+ * A downloaded EPUB, kept for offline reading. Stored as an ArrayBuffer: WebKit
+ * cannot store Blobs in IndexedDB in ephemeral sessions (Safari Private
+ * Browsing). `blob` is the older format, still read.
+ */
+export type CachedFile = { sha256: string; data?: ArrayBuffer; blob?: Blob; bytes: number; cachedAt: number };
 export type Setting = { key: string; value: unknown; updatedAt: number };
 
 export class LocalDB extends Dexie {

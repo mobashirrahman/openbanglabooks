@@ -50,7 +50,11 @@ function readerCsp(nonce: string) {
     "object-src 'none'",
     "base-uri 'none'",
     "form-action 'self'",
-    "frame-ancestors 'none'",
+    // not 'none': the chapter iframes are blob: documents that inherit this
+    // policy, and WebKit applies the inherited frame-ancestors to them – with
+    // 'none' Safari refuses to load the book. 'self' still blocks every other
+    // site from framing the reader.
+    "frame-ancestors 'self'",
   ].join("; ");
 }
 

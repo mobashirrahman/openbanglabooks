@@ -270,9 +270,11 @@ export function Reader(props: ReaderProps) {
 
   // ── taps on the book ──────────────────────────────────────────────────────
   // The outer quarters of the book turn pages and the middle toggles the
-  // controls. Taps arrive from two places: the section iframe (the text) and
-  // the host (foliate's page margins live in its shadow DOM, outside the
-  // iframe – on a phone that is exactly where a thumb taps "back").
+  // controls; a tap on the desk beside the book counts as its outer edge (on
+  // an iPad in landscape the screen edge is desk, not page). Taps arrive from
+  // two places: the section iframe (the text) and the stage around it (the
+  // desk, and foliate's page margins, which live in its shadow DOM outside
+  // the iframe – on a phone exactly where a thumb taps "back").
   const turnRef = useRef(turn);
   turnRef.current = turn;
   const tapAt = useCallback((clientX: number) => {
@@ -291,6 +293,7 @@ export function Reader(props: ReaderProps) {
   const onHostClick = (e: React.MouseEvent) => {
     const press = hostPress.current;
     hostPress.current = null;
+    if ((e.target as Element).closest("button, a")) return; // the desk's own controls
     if (press?.selecting || anySelection()) {
       // the first tap dismisses the selection (a click outside the frame does not)
       for (const c of engineRef.current?.contents() ?? []) c.doc.getSelection()?.removeAllRanges();
@@ -463,7 +466,12 @@ export function Reader(props: ReaderProps) {
         } as React.CSSProperties
       }
     >
-      <div ref={stageRef} className="absolute inset-0 pt-safe pb-safe">
+      <div
+        ref={stageRef}
+        className="absolute inset-0 pt-safe pb-safe"
+        onPointerDown={onHostPointerDown}
+        onClick={onHostClick}
+      >
         <BookFrame
           width={frame.width}
           height={frame.height}
@@ -475,7 +483,7 @@ export function Reader(props: ReaderProps) {
           onEdge={(dir) => void turn(dir)}
           labels={{ prev: labels.prevPage, next: labels.nextPage }}
         >
-          <div ref={hostRef} className="absolute inset-0" onPointerDown={onHostPointerDown} onClick={onHostClick} />
+          <div ref={hostRef} className="absolute inset-0" />
         </BookFrame>
       </div>
 

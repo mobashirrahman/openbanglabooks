@@ -53,7 +53,8 @@ Useful scripts:
 | `pnpm brand` | Regenerates logos, favicon and PWA icons from the mark geometry |
 | `pnpm fonts` | Re-syncs self-hosted Bengali font subsets from @fontsource |
 | `pnpm test` | Unit tests (Vitest) |
-| `pnpm test:e2e` | Browser tests at six viewports (needs a running build on :3100, see below) |
+| `pnpm test:e2e` | Browser tests at six viewports in Chromium and WebKit (needs a running build on :3100, see below) |
+| `pnpm test:e2e:webkit` | The WebKit (Safari engine) projects only |
 | `pnpm typecheck` | Route type generation + `tsc` |
 
 ## Testing
@@ -61,13 +62,26 @@ Useful scripts:
 ```bash
 pnpm test                                   # unit: rights rule, sanitiser, EPUB validation, …
 pnpm build && pnpm start -p 3100 &          # production server for browser tests
-pnpm test:e2e                               # all six viewports
-pnpm test:e2e --project=mobile-390          # one viewport
+pnpm test:e2e                               # everything: 6 Chromium + 7 WebKit projects
+pnpm test:e2e:webkit                        # WebKit (Safari engine) only
+pnpm test:e2e --project=mobile-390          # one viewport, one engine
 ```
 
-Screenshots for visual review land in `test-results/screenshots/<viewport>/`.
-Viewports: 375×812, 390×844, 768×1024, 1024×768, 1440×900, 1920×1080
-(Chromium with touch emulation for the mobile/tablet sizes).
+Viewports: 375×812, 390×844, 768×1024, 1024×768, 1440×900, 1920×1080, each in
+two engines:
+
+- **Chromium** (`mobile-390`, …) with touch emulation for the phone and tablet sizes.
+- **WebKit** (`webkit-mobile-390`, …) with Apple device profiles: iPhone 13 mini and
+  iPhone 13, iPad mini portrait and landscape, desktop Safari. One more project,
+  `webkit-iphone-safari-ui`, uses an iPhone 13 as Safari really shows it
+  (390×664, with the address bar and toolbar taking part of the screen).
+
+WebKit is Playwright's build of Safari's engine on Linux. It catches WebKit
+rendering and behaviour (it found two real Safari bugs), but it is not Safari
+on a physical iPhone. It needs system libraries once:
+`sudo pnpm exec playwright install-deps webkit`.
+
+Screenshots for visual review land in `test-results/screenshots/<project>/`.
 
 ## Project layout
 

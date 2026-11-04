@@ -1,6 +1,6 @@
 import { expect, test } from "@playwright/test";
 import AxeBuilder from "@axe-core/playwright";
-import { expectBengaliFonts, expectNoHorizontalOverflow, shot } from "./helpers";
+import { expectBengaliFonts, expectNoHorizontalOverflow, shot, viewportOf } from "./helpers";
 
 test.describe("public catalog", () => {
   test("home: Bengali UI, featured book, shelves, structured data", async ({ page }, info) => {
@@ -103,7 +103,7 @@ test.describe("public catalog", () => {
   });
 
   test("accessibility: no serious or critical axe violations", async ({ page }, info) => {
-    test.skip(!["mobile-390", "laptop-1440"].includes(info.project.name), "axe on one phone and one desktop size");
+    test.skip(!["mobile-390", "laptop-1440"].includes(viewportOf(info)), "axe on one phone and one desktop size");
     for (const path of ["/", "/books/gora", "/books", "/authors/sarat-chandra-chattopadhyay"]) {
       await page.goto(path);
       const results = await new AxeBuilder({ page }).exclude("nextjs-portal").analyze();
