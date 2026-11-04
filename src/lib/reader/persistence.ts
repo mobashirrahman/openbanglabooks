@@ -53,7 +53,7 @@ export async function addBookmark(
   b: { cfi: string; fraction: number; chapter: string | null; excerpt: string },
 ) {
   await localDB().bookmarks.put({
-    id: crypto.randomUUID(),
+    id: globalThis.crypto?.randomUUID?.() ?? `${Date.now().toString(36)}-${Math.random().toString(36).slice(2)}`,
     workSlug: work.slug,
     fileSha,
     ...b,

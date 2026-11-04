@@ -23,9 +23,14 @@ export async function loadEpubBytes(sha256: string, url: string): Promise<Uint8A
   }
   if (!res.ok) throw new BookFileError(`HTTP ${res.status}`);
   const bytes = new Uint8Array(await res.arrayBuffer());
-  const digest = new Uint8Array(await crypto.subtle.digest("SHA-256", bytes));
-  const hex = [...digest].map((b) => b.toString(16).padStart(2, "0")).join("");
-  if (hex !== sha256) throw new BookFileError("checksum mismatch");
+  // integrity check (defence in depth). WebCrypto only exists in secure contexts
+  // (HTTPS or localhost); over plain HTTP elsewhere the same-origin file is trusted as is.
+  const subtle = globalThis.crypto?.subtle;
+  if (subtle) {
+    const digest = new Uint8Array(await subtle.digest("SHA-256", bytes));
+    const hex = [...digest].map((b) => b.toString(16).padStart(2, "0")).join("");
+    if (hex !== sha256) throw new BookFileError("checksum mismatch");
+  }
   db.files
     .put({ sha256, blob: new Blob([bytes], { type: "application/epub+zip" }), bytes: bytes.byteLength, cachedAt: Date.now() })
     .catch(() => {

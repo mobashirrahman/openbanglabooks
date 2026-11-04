@@ -19,7 +19,7 @@
     "fonts": "tsx scripts/fonts/sync-fonts.ts",
     "brand": "tsx scripts/render/brand.ts",
     "ingest": "tsx scripts/ingest/index.ts",
-    "render:covers": "tsx scripts/render/covers.ts"
+    "render:og": "tsx scripts/render/og.ts"
   },
   "dependencies": {
     "@supabase/ssr": "^0.12.7",

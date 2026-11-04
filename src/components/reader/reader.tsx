@@ -6,7 +6,7 @@ import { localDB, type WorkSnapshot } from "@/lib/local/db";
 import { createEngine, type Engine, type Relocation } from "@/lib/reader/engine";
 import { loadEpubBytes, OfflineError } from "@/lib/reader/epub-loader";
 import { columnsFor, frameSize, pageGeometry } from "@/lib/reader/layout";
-import { readerCss } from "@/lib/reader/styles";
+import { installFontFaces, readerCss } from "@/lib/reader/styles";
 import { THEMES } from "@/lib/reader/settings";
 import { useReaderSettings } from "@/lib/reader/use-reader-settings";
 import { addBookmark, getPosition, savePosition, touchOpened } from "@/lib/reader/persistence";
@@ -49,6 +49,11 @@ export function Reader(props: ReaderProps) {
   const locationRef = useRef<Relocation | null>(null);
   const saveTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const hideTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const lastLayout = useRef("");
+  const restoring = useRef<string | null>(null);
+  const restoreToken = useRef(0);
+  const phaseRef = useRef<Phase>("loading");
+  const lastCss = useRef("");
   const settingsRef = useRef(settings);
   settingsRef.current = settings;
 
@@ -56,6 +61,7 @@ export function Reader(props: ReaderProps) {
     () => typeof window !== "undefined" && matchMedia("(prefers-reduced-motion: reduce)").matches,
     [],
   );
+  phaseRef.current = phase;
   const theme = THEMES[settings.theme];
   const mobile = stage.width > 0 && stage.width < MOBILE_MAX;
   const columns = mobile ? 1 : columnsFor(stage.width, stage.height, settings.layout);
@@ -136,7 +142,10 @@ export function Reader(props: ReaderProps) {
               if (saveTimer.current) clearTimeout(saveTimer.current);
               saveTimer.current = setTimeout(() => flush(), 500);
             },
-            onLoad: (doc) => attachDocHandlers(doc),
+            onLoad: (doc) => {
+              installFontFaces(doc, window.location.origin);
+              attachDocHandlers(doc);
+            },
           },
         );
         if (cancelled) {
@@ -144,6 +153,8 @@ export function Reader(props: ReaderProps) {
           return;
         }
         engineRef.current = engine;
+        lastLayout.current = "";
+        lastCss.current = "";
         applyPresentation(engine);
         await engine.start();
         if (!cfi && !props.initial.href) {
@@ -180,7 +191,7 @@ export function Reader(props: ReaderProps) {
       const cols = isMobile ? 1 : columnsFor(width, height, s.layout);
       const frame = frameSize(width, height, cols, isMobile);
       const g = pageGeometry(frame.width, frame.height, cols, s.margin, isMobile);
-      engine.setLayout({
+      const layout = {
         flow: s.flow,
         gap: g.gap,
         margin: g.margin,
@@ -189,8 +200,35 @@ export function Reader(props: ReaderProps) {
         maxBlockSize: `${frame.height}px`,
         maxColumnCount: cols,
         animated: s.animations && !reducedMotion,
-      });
-      engine.setStyles(readerCss(s, window.location.origin));
+      };
+      // every layout attribute change re-renders the section; only touch what changed
+      const layoutKey = JSON.stringify(layout);
+      const css = readerCss(s);
+      const layoutChanged = layoutKey !== lastLayout.current;
+      const cssChanged = css !== lastCss.current;
+      if (!layoutChanged && !cssChanged) return;
+      // remember where the reader is *before* reflowing (positions are CFIs, never pages)
+      const anchor = restoring.current ?? locationRef.current?.cfi ?? null;
+      if (layoutChanged) {
+        lastLayout.current = layoutKey;
+        engine.setLayout(layout);
+      }
+      if (cssChanged) {
+        lastCss.current = css;
+        engine.setStyles(css);
+      }
+      if (anchor && phaseRef.current === "ready") {
+        restoring.current = anchor;
+        const token = ++restoreToken.current;
+        const docs = engine.contents().map((c) => c.doc);
+        void Promise.all(docs.map((d) => d.fonts?.ready))
+          .then(() => new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(r))))
+          .then(async () => {
+            if (token !== restoreToken.current) return; // a newer change will restore instead
+            await engine.goTo(anchor);
+            restoring.current = null;
+          });
+      }
     },
     [reducedMotion],
   );
@@ -355,6 +393,12 @@ export function Reader(props: ReaderProps) {
     <div
       className="reader fixed inset-0 select-none"
       data-columns={columns}
+      data-phase={phase}
+      data-ended={ended || undefined}
+      data-cfi={location?.cfi}
+      data-fraction={location ? location.fraction.toFixed(4) : undefined}
+      data-section={location?.sectionIndex}
+      data-visible={location?.range ? location.range.toString().replace(/\s+/g, " ").trim().slice(0, 3000) : undefined}
       style={
         {
           background: theme.desk,

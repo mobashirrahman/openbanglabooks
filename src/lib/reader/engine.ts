@@ -55,7 +55,38 @@ type FoliateView = HTMLElement & {
   close(): void;
   getSectionFractions(): number[];
   resolveNavigation(target: string): { index: number; anchor: (doc: Document) => Range | Node } | undefined;
+  getCFI(index: number, range?: Range): string;
 };
+
+/**
+ * A one-character range at the first visible letter of `range`. Foliate's
+ * visible-range CFI often starts on an element boundary (before a paragraph
+ * that began on an earlier page); anchoring to it re-opens on that earlier
+ * page. A point at the first visible character is exact.
+ */
+function firstCharRange(range: Range): Range | null {
+  const doc = range.startContainer.ownerDocument;
+  if (!doc) return null;
+  const root = range.commonAncestorContainer;
+  const walker = doc.createTreeWalker(root.nodeType === 3 ? root.parentNode! : root, NodeFilter.SHOW_TEXT);
+  let node: Node | null = range.startContainer.nodeType === 3 ? range.startContainer : walker.nextNode();
+  if (range.startContainer.nodeType === 3) walker.currentNode = range.startContainer;
+  while (node) {
+    if (range.intersectsNode(node)) {
+      const text = node.textContent ?? "";
+      let i = node === range.startContainer ? range.startOffset : 0;
+      while (i < text.length && /\s/.test(text[i])) i++;
+      if (i < text.length) {
+        const r = doc.createRange();
+        r.setStart(node, i);
+        r.setEnd(node, Math.min(text.length, i + 1));
+        return r;
+      }
+    }
+    node = walker.nextNode();
+  }
+  return null;
+}
 
 export type EngineCallbacks = {
   onRelocate: (r: Relocation) => void;
@@ -132,8 +163,19 @@ export async function createEngine(
     // foliate renders a blank page before and after each section
     const pages = Math.max(1, (r.pages ?? 3) - 2);
     const page = Math.min(pages, Math.max(1, r.page ?? 1));
+    let cfi = d.cfi;
+    if (d.range && d.section) {
+      const point = firstCharRange(d.range);
+      if (point) {
+        try {
+          cfi = view.getCFI(d.section.current, point);
+        } catch {
+          /* keep the range CFI */
+        }
+      }
+    }
     callbacks.onRelocate({
-      cfi: d.cfi,
+      cfi,
       fraction: Number.isFinite(d.fraction) ? Math.min(1, Math.max(0, d.fraction)) : 0,
       sectionIndex: d.section?.current ?? 0,
       sectionCount: d.section?.total ?? book.sections.length,

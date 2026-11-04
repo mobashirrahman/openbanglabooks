@@ -1,0 +1,10 @@
+node_modules
+.next
+.cache
+test-results
+playwright-report
+.git
+.env*
+!.env.example
+supabase/.temp
+*.log

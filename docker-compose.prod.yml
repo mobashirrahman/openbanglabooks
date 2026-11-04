@@ -1,0 +1,45 @@
+# Self-hosted production: the Next.js app behind Caddy (automatic HTTPS).
+# HTTPS is required in production: the reader uses WebCrypto and the PWA needs a secure context.
+#
+#   cp .env.example .env.production   # fill in values (see docs/deploy.md)
+#   docker compose -f docker-compose.prod.yml --env-file .env.production up -d --build
+#
+# Supabase is external (Supabase Cloud or a self-hosted Supabase stack).
+
+services:
+  app:
+    build:
+      context: .
+      args:
+        NEXT_PUBLIC_SITE_URL: ${NEXT_PUBLIC_SITE_URL}
+        NEXT_PUBLIC_SUPABASE_URL: ${NEXT_PUBLIC_SUPABASE_URL}
+        NEXT_PUBLIC_SUPABASE_ANON_KEY: ${NEXT_PUBLIC_SUPABASE_ANON_KEY}
+    restart: unless-stopped
+    environment:
+      REVALIDATE_SECRET: ${REVALIDATE_SECRET}
+    volumes:
+      # incremental cache (revalidated catalog pages) survives restarts
+      - next-cache:/app/.next/cache
+    expose:
+      - "3000"
+
+  caddy:
+    image: caddy:2
+    restart: unless-stopped
+    depends_on:
+      - app
+    ports:
+      - "80:80"
+      - "443:443"
+      - "443:443/udp"
+    environment:
+      SITE_DOMAIN: ${SITE_DOMAIN}
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy-data:/data
+      - caddy-config:/config
+
+volumes:
+  next-cache:
+  caddy-data:
+  caddy-config:

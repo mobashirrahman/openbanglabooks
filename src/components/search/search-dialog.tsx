@@ -112,11 +112,12 @@ export function SearchDialog({ locale, labels }: { locale: Locale; labels: Label
             "group inline-flex h-10 items-center gap-2 rounded-control text-on-cloth-muted transition-colors duration-200 hover:text-on-cloth focus-visible:outline-on-cloth",
             "w-10 justify-center sm:w-64 sm:justify-start sm:bg-cloth-raised sm:px-3 sm:hover:bg-[color-mix(in_oklab,var(--cloth-raised),white_6%)]",
           )}
-          aria-label={labels.search}
         >
           <Search aria-hidden className="size-5 shrink-0 sm:size-[18px]" />
+          {/* accessible name contains the visible text (WCAG 2.5.3) */}
+          <span className="sr-only">{labels.search}: </span>
           <span className="hidden truncate text-sm sm:inline">{labels.placeholder}</span>
-          <kbd className="ml-auto hidden rounded border border-on-cloth/25 px-1.5 font-sans text-xs text-on-cloth-muted sm:inline">/</kbd>
+          <kbd aria-hidden className="ml-auto hidden rounded border border-on-cloth/25 px-1.5 font-sans text-xs text-on-cloth-muted sm:inline">/</kbd>
         </button>
       </Dialog.Trigger>
       <Dialog.Portal>

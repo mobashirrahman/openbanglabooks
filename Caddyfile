@@ -1,0 +1,18 @@
+{$SITE_DOMAIN} {
+	encode zstd gzip
+
+	# hashed build assets, fonts and content-addressed books never change
+	@immutable path /_next/static/* /fonts/* /api/books/*
+	header @immutable Cache-Control "public, max-age=31536000, immutable"
+
+	header {
+		Strict-Transport-Security "max-age=31536000; includeSubDomains"
+		-Server
+	}
+
+	reverse_proxy app:3000
+}
+
+www.{$SITE_DOMAIN} {
+	redir https://{$SITE_DOMAIN}{uri} permanent
+}

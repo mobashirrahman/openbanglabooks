@@ -12,6 +12,8 @@ const nextConfig: NextConfig = {
   partialPrefetching: true,
   output: "standalone",
   poweredByHeader: false,
+  // dev only: extra hostnames allowed to load dev assets (e.g. a Tailscale or LAN address)
+  allowedDevOrigins: (process.env.DEV_ORIGINS ?? "").split(",").map((h) => h.trim()).filter(Boolean),
   experimental: {
     globalNotFound: true,
   },

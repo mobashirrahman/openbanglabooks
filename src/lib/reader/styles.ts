@@ -6,13 +6,10 @@ import { FONTS, THEMES, type ReaderSettings } from "./settings";
  * Overrides publisher typography where it fights readability, keeps
  * structural styles (centring, poems, headings) from the book.
  */
-export function readerCss(s: ReaderSettings, origin: string): string {
+export function readerCss(s: ReaderSettings): string {
   const theme = THEMES[s.theme];
   const font = FONTS[s.font].family;
-  // sections are blob: documents, where root-relative URLs cannot resolve
-  const faces = READER_FONT_FACES.replaceAll("url(/fonts/", `url(${origin}/fonts/`);
-  return `${faces}
-@namespace epub "http://www.idpf.org/2007/ops";
+  return `@namespace epub "http://www.idpf.org/2007/ops";
 html {
   color-scheme: ${s.theme === "dark" ? "dark" : "light"};
   background: ${theme.paper} !important;
@@ -61,6 +58,21 @@ img, svg { max-width: 100%; height: auto; }
 .title-page h1 { font-size: 2.2em; margin-top: 0; }
 .title-page .author { color: ${theme.muted}; }
 `;
+}
+
+/**
+ * Adds the self-hosted Bengali @font-face rules to a section document, once.
+ * Kept out of setStyles(): re-creating font faces on every settings change
+ * makes the engine measure the reading anchor with fallback metrics and lose
+ * the reader's place on reflow.
+ */
+export function installFontFaces(doc: Document, origin: string) {
+  if (doc.getElementById("obb-font-faces")) return;
+  const style = doc.createElement("style");
+  style.id = "obb-font-faces";
+  // sections are blob: documents, where root-relative URLs cannot resolve
+  style.textContent = READER_FONT_FACES.replaceAll("url(/fonts/", `url(${origin}/fonts/`);
+  (doc.head ?? doc.documentElement).prepend(style);
 }
 
 /** Strips active content from EPUB XHTML before rendering (CSP is the primary guard). */
