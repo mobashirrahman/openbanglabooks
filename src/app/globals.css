@@ -1,133 +1,313 @@
 @import "tailwindcss";
 @import "tw-animate-css";
 @import "shadcn/tailwind.css";
+@import "../styles/fonts.css";
 
-@custom-variant dark (&:is(.dark *));
+/*
+ * OpenBanglaBooks design tokens — "the cloth-bound library".
+ * Primitive → semantic → component. Components use semantic tokens only.
+ *
+ *  cloth  Deep Forest Green  #233B30  identity fields (header band, featured volume, active nav)
+ *  paper  Warm Ivory         #F5EFE4  editorial + reading surfaces
+ *  ink    Rich Ink           #282720  text
+ *  foil   Antique Brass      #C2A06C  hairlines, logo, cover stamping (text only on cloth/charcoal)
+ *  accent Muted Terracotta   #A65D4E  progress, bookmark ribbon (small text uses #8E4C3E)
+ *  night  Dark Charcoal      #202423  dark theme
+ */
 
-@theme inline {
-  --color-background: var(--background);
-  --color-foreground: var(--foreground);
-  --font-sans: var(--font-sans);
-  --font-mono: var(--font-geist-mono);
-  --font-heading: var(--font-sans);
-  --color-sidebar-ring: var(--sidebar-ring);
-  --color-sidebar-border: var(--sidebar-border);
-  --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
-  --color-sidebar-accent: var(--sidebar-accent);
-  --color-sidebar-primary-foreground: var(--sidebar-primary-foreground);
-  --color-sidebar-primary: var(--sidebar-primary);
-  --color-sidebar-foreground: var(--sidebar-foreground);
-  --color-sidebar: var(--sidebar);
-  --color-chart-5: var(--chart-5);
-  --color-chart-4: var(--chart-4);
-  --color-chart-3: var(--chart-3);
-  --color-chart-2: var(--chart-2);
-  --color-chart-1: var(--chart-1);
-  --color-ring: var(--ring);
-  --color-input: var(--input);
-  --color-border: var(--border);
-  --color-destructive: var(--destructive);
-  --color-accent-foreground: var(--accent-foreground);
-  --color-accent: var(--accent);
-  --color-muted-foreground: var(--muted-foreground);
-  --color-muted: var(--muted);
-  --color-secondary-foreground: var(--secondary-foreground);
-  --color-secondary: var(--secondary);
-  --color-primary-foreground: var(--primary-foreground);
-  --color-primary: var(--primary);
-  --color-popover-foreground: var(--popover-foreground);
-  --color-popover: var(--popover);
-  --color-card-foreground: var(--card-foreground);
-  --color-card: var(--card);
-  --radius-sm: calc(var(--radius) * 0.6);
-  --radius-md: calc(var(--radius) * 0.8);
-  --radius-lg: var(--radius);
-  --radius-xl: calc(var(--radius) * 1.4);
-  --radius-2xl: calc(var(--radius) * 1.8);
-  --radius-3xl: calc(var(--radius) * 2.2);
-  --radius-4xl: calc(var(--radius) * 2.6);
-}
+@custom-variant dark (&:where([data-theme="dark"], [data-theme="dark"] *));
 
 :root {
-  --background: oklch(1 0 0);
-  --foreground: oklch(0.145 0 0);
-  --card: oklch(1 0 0);
-  --card-foreground: oklch(0.145 0 0);
-  --popover: oklch(1 0 0);
-  --popover-foreground: oklch(0.145 0 0);
-  --primary: oklch(0.205 0 0);
-  --primary-foreground: oklch(0.985 0 0);
-  --secondary: oklch(0.97 0 0);
-  --secondary-foreground: oklch(0.205 0 0);
-  --muted: oklch(0.97 0 0);
-  --muted-foreground: oklch(0.556 0 0);
-  --accent: oklch(0.97 0 0);
-  --accent-foreground: oklch(0.205 0 0);
-  --destructive: oklch(0.577 0.245 27.325);
-  --border: oklch(0.922 0 0);
-  --input: oklch(0.922 0 0);
-  --ring: oklch(0.708 0 0);
-  --chart-1: oklch(0.87 0 0);
-  --chart-2: oklch(0.556 0 0);
-  --chart-3: oklch(0.439 0 0);
-  --chart-4: oklch(0.371 0 0);
-  --chart-5: oklch(0.269 0 0);
-  --radius: 0.625rem;
-  --sidebar: oklch(0.985 0 0);
-  --sidebar-foreground: oklch(0.145 0 0);
-  --sidebar-primary: oklch(0.205 0 0);
-  --sidebar-primary-foreground: oklch(0.985 0 0);
-  --sidebar-accent: oklch(0.97 0 0);
-  --sidebar-accent-foreground: oklch(0.205 0 0);
-  --sidebar-border: oklch(0.922 0 0);
-  --sidebar-ring: oklch(0.708 0 0);
+  /* primitives */
+  --green-50: #eef3f0;
+  --green-100: #d9e4de;
+  --green-200: #b5c9be;
+  --green-300: #8aa898;
+  --green-400: #5f8573;
+  --green-500: #436656;
+  --green-600: #325244;
+  --green-700: #2a4639;
+  --green-800: #233b30;
+  --green-900: #1a2d24;
+  --green-950: #111e18;
+  --ivory-50: #fbf8f2;
+  --ivory-100: #f5efe4;
+  --ivory-200: #ede5d6;
+  --ivory-300: #e2d6c0;
+  --ink-900: #282720;
+  --ink-700: #4a4840;
+  --ink-600: #5c584e;
+  --ink-500: #6b665a;
+  --brass-300: #d9c29a;
+  --brass-500: #c2a06c;
+  --brass-700: #9c7a45;
+  --terracotta-200: #e7c9bf;
+  --terracotta-500: #a65d4e;
+  --terracotta-700: #8e4c3e;
+  --charcoal-950: #181b1a;
+  --charcoal-900: #202423;
+  --charcoal-800: #272c2a;
+  --charcoal-700: #313734;
+  --charcoal-600: #3d4441;
+
+  /* semantic — light (default) */
+  --bg: var(--ivory-100);
+  --surface: var(--ivory-50);
+  --sunken: var(--ivory-200);
+  --fg: var(--ink-900);
+  --fg-muted: var(--ink-600);
+  --fg-subtle: var(--ink-500);
+  --line: rgb(40 39 32 / 0.12);
+  --line-strong: rgb(40 39 32 / 0.24);
+  --cloth: var(--green-800);
+  --cloth-raised: var(--green-700);
+  --on-cloth: var(--ivory-100);
+  --on-cloth-muted: rgb(245 239 228 / 0.74);
+  --foil: var(--brass-500);
+  --foil-text: var(--brass-300); /* brass that may carry text, on cloth only */
+  --accent: var(--terracotta-500);
+  --accent-text: var(--terracotta-700);
+  --accent-soft: var(--terracotta-200);
+  --link: var(--green-700);
+  --focus: var(--green-700);
+  --desk: #e9e0cf; /* the surface a book lies on, behind reader pages */
+  --scrim: rgb(24 27 26 / 0.42);
+  --shadow-color: 32 36 34;
+
+  /* shadcn semantic mapping */
+  --background: var(--bg);
+  --foreground: var(--fg);
+  --card: var(--surface);
+  --card-foreground: var(--fg);
+  --popover: var(--surface);
+  --popover-foreground: var(--fg);
+  --primary: var(--cloth);
+  --primary-foreground: var(--on-cloth);
+  --secondary: var(--sunken);
+  --secondary-foreground: var(--fg);
+  --muted: var(--sunken);
+  --muted-foreground: var(--fg-muted);
+  --accent-ui: var(--sunken);
+  --destructive: #a3392b;
+  --border: var(--line);
+  --input: var(--line-strong);
+  --ring: var(--focus);
+
+  color-scheme: light;
 }
 
-.dark {
-  --background: oklch(0.145 0 0);
-  --foreground: oklch(0.985 0 0);
-  --card: oklch(0.205 0 0);
-  --card-foreground: oklch(0.985 0 0);
-  --popover: oklch(0.205 0 0);
-  --popover-foreground: oklch(0.985 0 0);
-  --primary: oklch(0.922 0 0);
-  --primary-foreground: oklch(0.205 0 0);
-  --secondary: oklch(0.269 0 0);
-  --secondary-foreground: oklch(0.985 0 0);
-  --muted: oklch(0.269 0 0);
-  --muted-foreground: oklch(0.708 0 0);
-  --accent: oklch(0.269 0 0);
-  --accent-foreground: oklch(0.985 0 0);
-  --destructive: oklch(0.704 0.191 22.216);
-  --border: oklch(1 0 0 / 10%);
-  --input: oklch(1 0 0 / 15%);
-  --ring: oklch(0.556 0 0);
-  --chart-1: oklch(0.87 0 0);
-  --chart-2: oklch(0.556 0 0);
-  --chart-3: oklch(0.439 0 0);
-  --chart-4: oklch(0.371 0 0);
-  --chart-5: oklch(0.269 0 0);
-  --sidebar: oklch(0.205 0 0);
-  --sidebar-foreground: oklch(0.985 0 0);
-  --sidebar-primary: oklch(0.488 0.243 264.376);
-  --sidebar-primary-foreground: oklch(0.985 0 0);
-  --sidebar-accent: oklch(0.269 0 0);
-  --sidebar-accent-foreground: oklch(0.985 0 0);
-  --sidebar-border: oklch(1 0 0 / 10%);
-  --sidebar-ring: oklch(0.556 0 0);
+:root[data-theme="dark"] {
+  --bg: var(--charcoal-900);
+  --surface: var(--charcoal-800);
+  --sunken: var(--charcoal-950);
+  --fg: #ece6da;
+  --fg-muted: #b9b2a4;
+  --fg-subtle: #a29b8d;
+  --line: rgb(236 230 218 / 0.12);
+  --line-strong: rgb(236 230 218 / 0.24);
+  --cloth: var(--green-900);
+  --cloth-raised: var(--green-800);
+  --accent: #d08c7b;
+  --accent-text: #d08c7b;
+  --accent-soft: rgb(208 140 123 / 0.22);
+  --link: var(--green-200);
+  --focus: var(--brass-300);
+  --desk: #161918;
+  --scrim: rgb(0 0 0 / 0.56);
+  --shadow-color: 0 0 0;
+  color-scheme: dark;
+}
+
+@media (prefers-color-scheme: dark) {
+  /* no-JS fallback; the theme script normally sets data-theme before paint */
+  :root:not([data-theme]) {
+    --bg: var(--charcoal-900);
+    --surface: var(--charcoal-800);
+    --sunken: var(--charcoal-950);
+    --fg: #ece6da;
+    --fg-muted: #b9b2a4;
+    --fg-subtle: #a29b8d;
+    --line: rgb(236 230 218 / 0.12);
+    --line-strong: rgb(236 230 218 / 0.24);
+    --cloth: var(--green-900);
+    --accent-text: #d08c7b;
+    --link: var(--green-200);
+    --focus: var(--brass-300);
+    color-scheme: dark;
+  }
+}
+
+@theme inline {
+  --color-bg: var(--bg);
+  --color-surface: var(--surface);
+  --color-sunken: var(--sunken);
+  --color-fg: var(--fg);
+  --color-fg-muted: var(--fg-muted);
+  --color-fg-subtle: var(--fg-subtle);
+  --color-line: var(--line);
+  --color-line-strong: var(--line-strong);
+  --color-cloth: var(--cloth);
+  --color-cloth-raised: var(--cloth-raised);
+  --color-on-cloth: var(--on-cloth);
+  --color-on-cloth-muted: var(--on-cloth-muted);
+  --color-foil: var(--foil);
+  --color-foil-text: var(--foil-text);
+  --color-accent: var(--accent);
+  --color-accent-text: var(--accent-text);
+  --color-accent-soft: var(--accent-soft);
+  --color-link: var(--link);
+  --color-focus: var(--focus);
+  --color-desk: var(--desk);
+  --color-scrim: var(--scrim);
+
+  /* shadcn */
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --color-card: var(--card);
+  --color-card-foreground: var(--card-foreground);
+  --color-popover: var(--popover);
+  --color-popover-foreground: var(--popover-foreground);
+  --color-primary: var(--primary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-secondary: var(--secondary);
+  --color-secondary-foreground: var(--secondary-foreground);
+  --color-muted: var(--muted);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-destructive: var(--destructive);
+  --color-border: var(--border);
+  --color-input: var(--input);
+  --color-ring: var(--ring);
+
+  /* typefaces: Tiro Bangla (display), Hind Siliguri (UI), Noto Serif Bengali (reading) */
+  --font-display: "Tiro Bangla", "Noto Serif Bengali", serif;
+  --font-sans: "Hind Siliguri", system-ui, sans-serif;
+  --font-read: "Noto Serif Bengali", "Tiro Bangla", serif;
+  --font-heading: var(--font-display);
+
+  /*
+   * Type scale: major third (1.25) from a 17px base. Bengali glyphs read
+   * smaller than Latin at the same size, so the base is above 16px and the
+   * smallest size is 14px. Heading leading leaves room for matras and
+   * vowel signs above and below (ি ী ঁ ু ূ ৃ).
+   */
+  --text-xs: 0.875rem;
+  --text-xs--line-height: 1.5;
+  --text-sm: 0.9375rem;
+  --text-sm--line-height: 1.55;
+  --text-base: 1.0625rem;
+  --text-base--line-height: 1.65;
+  --text-lg: 1.3125rem;
+  --text-lg--line-height: 1.5;
+  --text-xl: 1.65rem;
+  --text-xl--line-height: 1.4;
+  --text-2xl: 2.0625rem;
+  --text-2xl--line-height: 1.35;
+  --text-3xl: 2.6rem;
+  --text-3xl--line-height: 1.3;
+  --text-4xl: 3.25rem;
+  --text-4xl--line-height: 1.25;
+  --text-5xl: 4.0625rem;
+  --text-5xl--line-height: 1.2;
+
+  --radius-cover: 2px;
+  --radius-control: 10px;
+  --radius-sheet: 20px;
+  --radius-sm: 6px;
+  --radius-md: 10px;
+  --radius-lg: 14px;
+  --radius-xl: 20px;
+
+  --ease-paper: cubic-bezier(0.2, 0.7, 0.2, 1);
+  --ease-settle: cubic-bezier(0.32, 0.72, 0, 1);
+
+  --shadow-book:
+    0 1px 1px rgb(var(--shadow-color) / 0.18),
+    0 10px 18px -10px rgb(var(--shadow-color) / 0.45),
+    0 22px 40px -24px rgb(var(--shadow-color) / 0.35);
+  --shadow-book-lift:
+    0 2px 2px rgb(var(--shadow-color) / 0.16),
+    0 18px 28px -12px rgb(var(--shadow-color) / 0.48),
+    0 34px 60px -30px rgb(var(--shadow-color) / 0.4);
+  --shadow-sheet: 0 -12px 40px -12px rgb(var(--shadow-color) / 0.35);
+  --shadow-pop: 0 12px 32px -12px rgb(var(--shadow-color) / 0.4), 0 0 0 1px var(--line);
+
+  --animate-skeleton: skeleton 1.6s var(--ease-paper) infinite;
+  @keyframes skeleton {
+    0%,
+    100% {
+      opacity: 0.55;
+    }
+    50% {
+      opacity: 1;
+    }
+  }
 }
 
 @layer base {
   * {
-    @apply border-border outline-ring/50;
-  }
-  body {
-    @apply bg-background text-foreground;
-  }
-  button:not(:disabled), [role="button"]:not(:disabled) {
-    cursor: pointer;
+    @apply border-line;
   }
   html {
-    @apply font-sans;
+    -webkit-text-size-adjust: 100%;
+    text-rendering: optimizeLegibility;
+    -webkit-tap-highlight-color: transparent;
+  }
+  body {
+    @apply bg-bg text-fg font-sans text-base antialiased;
+    font-feature-settings: "kern";
+    transition:
+      background-color 280ms var(--ease-paper),
+      color 280ms var(--ease-paper);
+  }
+  h1,
+  h2,
+  h3 {
+    @apply font-display font-normal text-balance;
+    /* Tiro Bangla ships one weight – hierarchy comes from size, never faux bold */
+    font-synthesis: none;
+  }
+  p {
+    text-wrap: pretty;
+  }
+  a {
+    text-underline-offset: 0.22em;
+    text-decoration-thickness: 1px;
+  }
+  :focus-visible {
+    outline: 2px solid var(--focus);
+    outline-offset: 2px;
+    border-radius: 4px;
+  }
+  ::selection {
+    background: rgb(194 160 108 / 0.38);
+  }
+  @media (prefers-reduced-motion: reduce) {
+    *,
+    *::before,
+    *::after {
+      animation-duration: 1ms !important;
+      animation-iteration-count: 1 !important;
+      transition-duration: 1ms !important;
+      scroll-behavior: auto !important;
+    }
+  }
+}
+
+@layer utilities {
+  /* horizontal shelves: native momentum scroll with snap, no visible scrollbar on touch */
+  .shelf-scroll {
+    scroll-snap-type: x mandatory;
+    scroll-padding-inline: var(--gutter, 1rem);
+    overscroll-behavior-x: contain;
+    scrollbar-width: none;
+  }
+  .shelf-scroll::-webkit-scrollbar {
+    display: none;
+  }
+  .pb-safe {
+    padding-bottom: env(safe-area-inset-bottom);
+  }
+  .pt-safe {
+    padding-top: env(safe-area-inset-top);
   }
 }
