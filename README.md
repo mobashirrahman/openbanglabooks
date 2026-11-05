@@ -15,13 +15,14 @@ published, each with its source and rights basis recorded.
 | Public catalog: home, book, author, genre, collection, browse + filters, search | Done (SSG/PPR, bn + en) |
 | Reader: foliate-js engine, spreads/single page, tap/swipe/keys, TOC, bookmarks, settings, CFI persistence | Done |
 | Signature motion: cover-to-book opening, a page curl that follows the finger (slide, fade or instant as options), reduced-motion paths | Done |
-| Highlights in five colours and underline, notes, "আমার নোট" with search, filters and Markdown/JSON export | Done (on this device; sync with accounts in Phase 2) |
+| Highlights in five colours and underline, notes, "আমার নোট" with search, filters and Markdown/JSON export | Done (synced when signed in) |
 | Search inside a book (Bengali-aware), quote cards to save or share, daily reading goals with streaks, time left in chapter and book | Done |
-| Local library (IndexedDB): continue reading, want-to-read, finished, bookmarks | Done |
+| Library (local-first in IndexedDB): continue reading, statuses, favourites, own shelves, bookmarks | Done |
 | SEO: metadata, canonical, hreflang, JSON-LD, sitemap, robots, OG images | Done |
 | Security: strict nonce CSP for the reader, EPUB sanitising, RLS everywhere | Done |
 | Content: 14 verified works ingested from Bengali Wikisource | Done |
-| Accounts, sync, shelves, admin UI (Phase 2) | Not started — see [docs/roadmap.md](docs/roadmap.md) |
+| Accounts (emailed code or link), sync across devices, shelves, ratings, reflections, history | Done (Phase 2) |
+| Admin: works, authors, editions, validated EPUB upload, genres, collections | Done (Phase 2, editors only) |
 | Goodreads/Hardcover/Readwise, personal EPUB import, service worker (Phase 3) | Not started |
 
 ## Stack
@@ -58,6 +59,7 @@ Useful scripts:
 | `pnpm test:e2e` | Browser tests at six viewports in Chromium and WebKit (needs a running build on :3100, see below) |
 | `pnpm test:e2e:webkit` | The WebKit (Safari engine) projects only |
 | `pnpm typecheck` | Route type generation + `tsc` |
+| `pnpm db:test` | Database tests (pgTAP): personal data isolation, sync rules, catalogue permissions |
 
 ## Testing
 
@@ -67,7 +69,13 @@ pnpm build && pnpm start -p 3100 &          # production server for browser test
 pnpm test:e2e                               # everything: 6 Chromium + 7 WebKit projects
 pnpm test:e2e:webkit                        # WebKit (Safari engine) only
 pnpm test:e2e --project=mobile-390          # one viewport, one engine
+pnpm db:test                                # pgTAP against the local database
 ```
+
+The account, sync and admin tests need the local Supabase stack: sign-in
+emails are read from Mailpit (http://127.0.0.1:54324), and the admin test
+uses the service-role key from `.env.local` to make its test account an
+editor and to remove the rows it created.
 
 Viewports: 375×812, 390×844, 768×1024, 1024×768, 1440×900, 1920×1080, each in
 two engines:

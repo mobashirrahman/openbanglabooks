@@ -35,29 +35,48 @@ search, filters and Markdown/JSON export; search inside a book; quote cards;
 daily reading goals with streaks and time-left estimates; the page curl.
 Everything is stored locally with `updatedAt` on every row, ready for sync.
 
-## Phase 2 — personal reading
+## Phase 2 — personal reading (done)
 
-- **Accounts:** Supabase Auth with email OTP / magic link (Mailpit locally);
-  Google OAuth once keys are provided.
-- **Schema:** `user_books`, `user_shelves`, `shelf_items`,
-  `reading_positions` (per device), `reading_sessions`, `bookmarks`,
-  `annotations`, `reader_settings`; RLS `user_id = auth.uid()` with pgTAP
-  tests.
-- **Sync:** a Dexie outbox → `sync_push` (row-level last-writer-wins on
-  `updatedAt`, tombstones) and `sync_pull(since server_seq)` on focus,
-  interval and reconnect. Conflicting note edits produce a conflict copy;
-  diverging positions offer a non-blocking "continue from 42% on your other
-  device?" prompt. Guest data is claimed on first sign-in.
-- **Annotations:** selection toolbar (highlight, underline, note, bookmark,
-  copy); anchors = CFI range + text quote (exact/prefix/suffix) + file hash;
-  re-anchoring falls back to quote search, else the note is marked orphaned
-  (never silently re-attached).
-- **আমার নোট:** browse, filter by book/author, search, edit, delete, jump to
-  passage, export Markdown/JSON.
-- **Shelves:** default (reading, want to read, finished, favourites, did not
-  finish) plus custom shelves, ratings, private reflections.
-- **Admin UI:** works, authors, editions, covers, genres, publication status,
-  validated EPUB upload; server actions with role checks.
+- **Accounts:** sign in with a six-digit code or the link in the same email
+  (Supabase Auth, Mailpit locally); no passwords. Account deletion removes
+  every personal row. Google sign-in is documented in `docs/deploy.md` but
+  not switched on (it needs OAuth keys).
+- **Sync** (local-first; nothing needs an account): every write to a synced
+  table lands in an outbox in the same IndexedDB transaction; `sync_push`
+  (last writer wins, tombstones) runs before `sync_pull(since version)` on
+  sign-in, changes, focus, reconnect and a one-minute timer. Notes are never
+  lost: concurrent edits keep a conflict copy, an edit outlives a delete
+  elsewhere. Reading places and reading time are per device; an open book
+  offers a newer place read on another device. Guest data is claimed on the
+  first sign-in; signing out clears the account's data from that device only.
+  A cloud in the header and a line on the profile page show the state.
+- **Library:** want to read, reading, finished, did not finish; favourites;
+  the reader's own shelves; a 1–5 rating and a private reflection per book;
+  a month-by-month history.
+- **Re-anchoring:** highlights from an older file of a book are found again
+  by their quote and its context, or kept and marked orphaned (never
+  attached to a guess).
+- **Admin UI** (`/admin`, editors only): works with credits, genres,
+  collections, cover and status; authors, editions, genres, collections;
+  validated EPUB upload with file history. Publishing needs a verified
+  rights basis.
+- **Tests:** pgTAP for personal data isolation, sync rules and catalogue
+  permissions; e2e for two devices of one reader, the library and the
+  admin.
+
+### Known limitations (Phase 2)
+
+- **Reading time is summed, not de-duplicated.** Two devices reading at the
+  same minute both count it.
+- **No conflict UI beyond copies.** A conflicting note shows up as a second
+  note marked "written on another device at the same time"; merging the two
+  is left to the reader.
+- **Settings sync whole.** Reader settings (theme, size, font, layout) are
+  one row: the device that changed them last wins all of them.
+- **Admin covers are generated variants only.** Uploading cover images
+  (the `covers` bucket exists) is not built yet.
+- **Roles are set in SQL.** Making someone an editor:
+  `update profiles set role = 'editor' where id = '<user id>';`
 
 ## Phase 3 — ecosystem and refinement
 

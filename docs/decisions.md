@@ -150,3 +150,43 @@ normalised copy of each chapter (canonically decomposed, joiners removed,
 lower-cased for Latin) that maps every character back to its DOM position,
 so matches become exact ranges and CFIs. Vowel signs and hasanta always count.
 
+
+## 12. Accounts: an emailed code first, the link second
+
+Readers sign in with a six-digit code from the email, typed on any device
+(Bengali digits accepted); the same email carries a link for this device.
+The link opens a client page that verifies the token in the browser, so mail
+scanners that prefetch links cannot use it up. No passwords to forget or
+leak. supabase-js loads only when a session cookie exists or on the sign-in
+page, so anonymous reading pays nothing for accounts.
+
+## 13. Sync: an outbox written by a Dexie middleware
+
+Every write to a synced table, from any code path, is recorded in an
+`outbox` store in the same transaction by a DBCore middleware
+(`src/lib/local/outbox.ts`); writes applied from the server are marked
+untracked. That makes "forgot to sync this write" impossible by
+construction. The server keeps a per-user version counter (a row lock makes
+it gapless), so `sync_pull(since)` pages never skip a change. Rules:
+
+- push before pull; last writer wins on `updated_at` (client clocks are
+  clamped to now + 5 minutes);
+- deletes are tombstones without their text;
+- notes are never lost: two concurrent edits keep the loser as a conflict
+  copy, and an edit outlives a delete made elsewhere;
+- reading places and reading time are per device, so devices never fight
+  over "where am I"; the reader offers a newer place instead.
+
+Rejected: syncing whole tables by timestamp (misses deletes and clock-skewed
+writes), CRDTs (heavy for single-user data where conflicts are rare).
+
+## 14. Admin: server actions, invoker functions, RLS twice
+
+Admin pages render per request as the signed-in editor; the proxy refreshes
+the session for `/admin` only. Each server action checks the role itself and
+validates its input, then writes with the editor's own session, so row level
+security checks again. Saves that touch several tables are single
+`security invoker` functions (`admin_save_work`, …), so a failed save changes
+nothing. EPUB upload is a route handler (books outgrow server action and
+proxy body limits) that checks the origin and role itself, validates the
+file before storing it, and stores it content-addressed.

@@ -43,6 +43,41 @@ REVALIDATE_SECRET=<long random string>
 `NEXT_PUBLIC_*` values are baked in at build time. The service-role key is
 **not** needed by the web server.
 
+### Accounts (Supabase Auth)
+
+In the Supabase dashboard (or `supabase/config.toml` for self-hosting):
+
+- **Site URL:** `https://<domain>`; **redirect URLs:** `https://<domain>/**`
+  (the sign-in link returns to `/signin/confirm` and `/en/signin/confirm`).
+- **Email template:** use `supabase/templates/sign-in.html` for both "Magic
+  link" and "Confirm signup", with the subject
+  `সাইন ইন কোড {{ .Token }} · OpenBanglaBooks`. The template shows the
+  six-digit code and links to `{{ .RedirectTo }}&token_hash={{ .TokenHash }}&type=email`.
+- **OTP length 6, expiry 1 hour.**
+- **SMTP:** Supabase's built-in mail sender is rate-limited to a few emails
+  an hour; configure your own SMTP (any transactional provider) before
+  launch, with SPF/DKIM for the sending domain.
+- **Rate limits:** the local config raises them for tests. In production keep
+  the defaults or lower (e.g. 30 sign-in emails per hour per IP) and turn on
+  CAPTCHA if abuse appears.
+- **Google sign-in (optional, not enabled yet):** create an OAuth client in
+  Google Cloud (authorised redirect `https://<ref>.supabase.co/auth/v1/callback`),
+  enable the Google provider with its ID and secret in Supabase, then add a
+  "Continue with Google" button that calls `signInWithOAuth({ provider:
+  "google", options: { redirectTo: origin + "/signin/confirm" } })` and
+  exchange the code on that page. Nothing else changes: sync and the admin
+  only see a user id.
+
+### Editors
+
+The admin (`/admin`) is for profiles with role `editor` or `admin`. After
+the person has signed in once:
+
+```sql
+update public.profiles set role = 'editor'
+where id = (select id from auth.users where email = 'editor@example.org');
+```
+
 ## 4. Build and run
 
 ```bash
@@ -67,3 +102,9 @@ server (ports 80 and 443 open).
 - **HTTPS is required:** WebCrypto (EPUB font de-obfuscation, file checksums) and the future service worker need a secure context.
 - **CSP:** set by `src/proxy.ts`; the reader's per-request nonce makes `/read/*` dynamic by design.
 - **Memory:** the container idles around 150–250 MB.
+- **Uploads:** EPUBs up to 50 MB go to `/api/admin/epub`. If a reverse
+  proxy sits in front of Caddy, allow that body size there too, and forward
+  the public host (`X-Forwarded-Host`): the upload and server actions both
+  check that requests come from the site's own origin.
+- **Several app instances:** set `NEXT_SERVER_ACTIONS_ENCRYPTION_KEY` to the
+  same value on all of them.
