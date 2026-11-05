@@ -259,3 +259,35 @@ not its title, not a highlight made in it.
   removes books that came from the account. "Remove everything from this
   device" removes both.
 
+## 17. Goodreads: a file, matched by sound
+
+Goodreads closed its API to new keys in 2020, so the exchange is the CSV
+the reader exports from Goodreads ("Import and export"). It is read and
+matched in the browser; nothing is uploaded.
+
+- **Matching.** Our books are public-domain Bengali editions without ISBNs,
+  and Goodreads spells their titles in many romanisations (Debdas, Devdas;
+  Golpoguccho, Galpaguchchha) or in Bengali script. Titles and authors are
+  reduced to a phonetic skeleton (`src/lib/transfer/phonetic.ts`):
+  consonants only, with the letters romanisations confuse folded together
+  (v/b, sh/s, th/t, chh/ch; ্য and ্ব dropped), a mark for a word that
+  starts with a vowel, and a few surname pairs that share no letters
+  (Chatterjee/Chattopadhyay, Tagore/Thakur). Words are then compared with a
+  little tolerance (one letter in longer words, run-together names), and
+  English titles we know as other names (The Golden Boat) come from the
+  catalogue's `title_latn` aliases.
+- **The reader decides.** A book is "found" only when exactly one of ours
+  agrees on both title and author. Close calls, two books that fit equally
+  (two parts of Srikanta) and the right title by another author go to
+  "Is this the book?", unchosen. Nothing is added before the reader presses
+  the button.
+- **Never overwriting.** For books already in the library, Goodreads only
+  fills what is empty (a rating, a reflection) unless the reader asks for
+  its status and dates. A reflection written here is never replaced.
+  Reviews and private notes come in as private reflections, by choice.
+- **Export** writes Goodreads' own column set (so Goodreads, StoryGraph and
+  others can import it), with English titles and authors from the
+  catalogue, and our id, Bengali title and author in extra columns that a
+  later import here uses to match exactly. Reflections go out only when the
+  reader ticks the box, and as Private Notes, never as public reviews.
+  Cells that a spreadsheet would run as formulas are escaped.

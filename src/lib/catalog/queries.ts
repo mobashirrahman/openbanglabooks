@@ -59,6 +59,36 @@ export async function listWorks(): Promise<WorkSummary[]> {
   return must(res, "works").map((w) => toSummary(w as unknown as RawWork));
 }
 
+/** Every work's titles and authors, in both scripts: what the Goodreads import matches against. */
+export type WorkNames = {
+  slug: string;
+  title_bn: string;
+  subtitle_bn: string | null;
+  title_en: string;
+  title_latn: string | null;
+  original_pub_year: number | null;
+  cover_variant: number;
+  authors: { name_bn: string; name_en: string }[];
+};
+
+export async function listWorkNames(): Promise<WorkNames[]> {
+  "use cache";
+  cacheLife("days");
+  cacheTag(CATALOG_TAG);
+  const res = await supabase
+    .from("works")
+    .select("slug, title_bn, subtitle_bn, title_en, title_latn, original_pub_year, cover_variant, work_authors ( position, role, authors ( name_bn, name_en ) )")
+    .order("title_en");
+  type Raw = Omit<WorkNames, "authors"> & { work_authors: { position: number; role: string; authors: { name_bn: string; name_en: string } | null }[] };
+  return (must(res, "work names") as unknown as Raw[]).map(({ work_authors, ...w }) => ({
+    ...w,
+    authors: work_authors
+      .filter((wa) => wa.role === "author" && wa.authors)
+      .sort((a, b) => a.position - b.position)
+      .map((wa) => wa.authors!),
+  }));
+}
+
 export async function getWork(slug: string): Promise<WorkDetail | null> {
   "use cache";
   cacheLife("days");
