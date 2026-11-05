@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import { DeviceData, ThemePreference } from "@/components/profile/preferences";
 import { AccountPanel } from "@/components/account/account-panel";
 import { LanguageSwitch } from "@/components/nav/language-switch";
+import { AppSection } from "@/components/offline/app-section";
 import { getDictionary, getLocale } from "@/lib/i18n";
 
 export async function generateMetadata(): Promise<Metadata> {
@@ -38,6 +39,10 @@ export default async function ProfilePage() {
         <section className="grid gap-4 py-8 sm:grid-cols-[12rem_1fr]">
           <h2 className="text-xl">{dict.profile.reading}</h2>
           <p className="text-fg-muted">{dict.profile.readingNote}</p>
+        </section>
+        <section className="grid gap-4 py-8 sm:grid-cols-[12rem_1fr]">
+          <h2 className="text-xl">{dict.profile.app}</h2>
+          <AppSection locale={locale} labels={dict.profile} />
         </section>
         <section className="grid gap-4 py-8 sm:grid-cols-[12rem_1fr]">
           <h2 className="text-xl">{dict.profile.data}</h2>

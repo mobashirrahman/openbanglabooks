@@ -34,6 +34,9 @@ export default defineConfig({
     baseURL,
     locale: "bn-BD",
     trace: "retain-on-failure",
+    // the service worker serves kept pages and hides requests from page.route();
+    // only the offline tests turn it on
+    serviceWorkers: "block",
   },
   projects: [
     ...viewports.map((v) => ({

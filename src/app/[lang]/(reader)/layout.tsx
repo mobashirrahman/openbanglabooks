@@ -6,6 +6,7 @@ import { locales } from "@/lib/i18n/config";
 import { siteUrl } from "@/lib/seo/site";
 import { READER_SETTINGS_KEY, THEMES } from "@/lib/reader/settings";
 import { SyncAgent } from "@/components/sync/sync-agent";
+import { ServiceWorker } from "@/components/offline/service-worker";
 
 /**
  * Root layout for the immersive reader. Separate from the site layout so that
@@ -46,6 +47,7 @@ export default async function ReaderLayout({ children }: LayoutProps<"/[lang]">)
       <body className="overflow-hidden overscroll-none bg-transparent">
         {children}
         <SyncAgent />
+        <ServiceWorker locale={locale} />
       </body>
     </html>
   );

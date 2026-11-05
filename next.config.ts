@@ -11,6 +11,8 @@ const nextConfig: NextConfig = {
   cacheComponents: true,
   partialPrefetching: true,
   output: "standalone",
+  // a second build folder lets a test build run beside a server still using .next
+  distDir: process.env.NEXT_DIST_DIR || ".next",
   poweredByHeader: false,
   // dev only: extra hostnames allowed to load dev assets (e.g. a Tailscale or LAN address)
   allowedDevOrigins: (process.env.DEV_ORIGINS ?? "").split(",").map((h) => h.trim()).filter(Boolean),
@@ -35,6 +37,11 @@ const nextConfig: NextConfig = {
       {
         source: "/fonts/:file*",
         headers: [{ key: "Cache-Control", value: "public, max-age=31536000, immutable" }],
+      },
+      {
+        // the service worker's code: the browser must always see the current version
+        source: "/sw-core.js",
+        headers: [{ key: "Cache-Control", value: "no-cache" }],
       },
       {
         source: "/brand/:file*",

@@ -155,6 +155,14 @@ const en: Dictionary = {
     lastRead: "Last read",
   },
   profile: {
+    app: "App",
+    appNote: "Keep OpenBanglaBooks on your phone or computer like an app: its own icon, its own window, and it opens without a connection.",
+    install: "Install the app",
+    installed: "Installed as an app on this device.",
+    installIos: "In Safari, tap Share (□↑), then “Add to Home Screen”.",
+    installOther: "Choose “Install app” or “Add to Home screen” in your browser's menu.",
+    offlineBooks: "Readable without a connection: {count} books",
+    offlineNone: "Any book you open can then be read without a connection.",
     title: "Profile",
     appearance: "Appearance",
     theme: "Theme",
@@ -355,6 +363,17 @@ const en: Dictionary = {
     and: "and",
     year: "Year",
     unknown: "Unknown",
+  },
+  offline: {
+    title: "You're offline",
+    body: "This page isn't saved on this device yet. Books you have opened before can be read without a connection.",
+    booksHere: "Readable on this device",
+    noBooks: "No books are saved on this device yet. Open a book once while online and it stays here.",
+    library: "My books",
+    notes: "My notes",
+    retry: "Try again",
+    backOnline: "You're back online.",
+    metaTitle: "Offline",
   },
   footer: {
     about:

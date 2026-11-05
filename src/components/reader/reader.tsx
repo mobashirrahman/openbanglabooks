@@ -60,6 +60,21 @@ function pointerReallyMoved(e: { screenX: number; screenY: number }) {
   return moved && window.matchMedia("(hover: hover)").matches;
 }
 
+/**
+ * A link's target place (?cfi= or ?at=), read in the browser. The server reads
+ * it too; this covers a reader page opened offline from the service worker's
+ * copy, which was kept without the query.
+ */
+function initialFromUrl(): { href: string | null; cfi: string | null } {
+  const sp = new URLSearchParams(window.location.search);
+  const at = sp.get("at");
+  const cfi = sp.get("cfi");
+  return {
+    href: at && /^[\w./#-]{1,200}$/.test(at) ? at : null,
+    cfi: cfi && cfi.startsWith("epubcfi(") && cfi.length < 500 ? cfi : null,
+  };
+}
+
 const hasSelection = (doc: Document) => {
   const sel = doc.getSelection();
   return Boolean(sel && !sel.isCollapsed && sel.toString().trim());
@@ -348,12 +363,13 @@ export function Reader(props: ReaderProps) {
       try {
         const [bytes, saved] = await Promise.all([loadEpubBytes(fileSha, fileUrl), getPosition(work.slug, fileSha)]);
         if (cancelled || !hostRef.current) return;
-        const cfi = props.initial.cfi ?? (props.initial.href ? null : saved?.cfi) ?? null;
+        const initial = props.initial.cfi || props.initial.href ? props.initial : initialFromUrl();
+        const cfi = initial.cfi ?? (initial.href ? null : saved?.cfi) ?? null;
         movedAt.current = (await localDB().positions.get(work.slug))?.updatedAt ?? 0;
         engine = await createEngine(
           hostRef.current,
           bytes,
-          { initialCfi: cfi, initialHref: props.initial.href ?? null },
+          { initialCfi: cfi, initialHref: initial.href ?? null },
           {
             onRelocate: (r) => {
               locationRef.current = r;
@@ -379,7 +395,7 @@ export function Reader(props: ReaderProps) {
         lastCss.current = "";
         applyPresentation(engine);
         await engine.start();
-        if (!cfi && !props.initial.href) {
+        if (!cfi && !initial.href) {
           // resume a book whose file changed since last time by progress fraction
           const any = await localDB().positions.get(work.slug);
           if (any && any.fileSha !== fileSha && any.fraction > 0) await engine.goToFraction(any.fraction);

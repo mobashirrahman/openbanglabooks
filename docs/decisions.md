@@ -190,3 +190,37 @@ security checks again. Saves that touch several tables are single
 nothing. EPUB upload is a route handler (books outgrow server action and
 proxy body limits) that checks the origin and role itself, validates the
 file before storing it, and stores it content-addressed.
+
+## 15. Offline: a small service worker of our own
+
+The plan named Serwist. We wrote the worker ourselves (`public/sw-core.js`,
+about 200 lines) because the rules are few and specific to this app, and
+Serwist's precache manifest comes from a bundler plugin, while our builds
+run on Turbopack:
+
+- **Pages** are network first, and every page that loads is kept. The app
+  navigates in the browser, so those navigations never pass the worker as
+  page loads: the page names each new path to the worker, which fetches and
+  keeps it. With no network and no copy, the worker serves `/offline`, which
+  lists the books on this device.
+- **Build assets and fonts** are cache first (content-hashed or immutable).
+  On a first visit the page is not yet controlled by the worker, so the page
+  reports every script and font it has loaded (a `PerformanceObserver`) and
+  the worker keeps them. Without that, the reader's engine, loaded on
+  demand, would be missing offline.
+- **Book files are not touched.** They already live in IndexedDB, keyed by
+  hash; a second copy in the Cache API would double the storage.
+- **Reader pages** are kept by path. Their response carries its own nonce
+  CSP header, and the kept copy is served with that header, so the cached
+  page and its policy still match. A reader link's `?cfi=` is read by the
+  page itself, so links to a passage work offline too.
+- **Builds:** pages reference their build's scripts, so they are kept per
+  build (`/sw.js` names the build; a new build installs a new worker). The
+  new worker fetches every page the old one kept, and only then drops the
+  old copies.
+- Never kept: `/admin`, `/api`, the sign-in link page, redirects, errors.
+
+The worker is registered in production builds only. Browser tests block it
+(`serviceWorkers: "block"`), except `offline.spec.ts`, because a worker
+answering requests hides them from `page.route()`.
+
