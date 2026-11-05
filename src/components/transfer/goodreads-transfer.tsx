@@ -2,7 +2,7 @@
 
 import { useMemo, useRef, useState } from "react";
 import Link from "next/link";
-import { Check, Download, FileUp, LoaderCircle, TriangleAlert } from "lucide-react";
+import { Check, CloudDownload, Download, FileUp, LoaderCircle, TriangleAlert } from "lucide-react";
 import { localDB, type LibraryStatus, type WorkSnapshot } from "@/lib/local/db";
 import type { WorkNames } from "@/lib/catalog/queries";
 import { formatNumber } from "@/lib/i18n/format";
@@ -14,11 +14,12 @@ import type { GoodreadsBook } from "@/lib/transfer/goodreads";
 import type { Match, MatchWork } from "@/lib/transfer/match";
 import { cn } from "@/lib/utils";
 
-type Labels = Dictionary["transfer"] & Record<"statusWant" | "statusReading" | "statusFinished" | "statusDnf", string>;
+export type TransferLabels = Dictionary["transfer"] & Record<"statusWant" | "statusReading" | "statusFinished" | "statusDnf", string>;
+type Labels = TransferLabels;
 type Row = { book: GoodreadsBook; match: Match; choice: string };
 type State =
   | { kind: "idle" }
-  | { kind: "reading" }
+  | { kind: "reading"; count?: number }
   | { kind: "matching"; done: number; total: number }
   | { kind: "review"; rows: Row[] }
   | { kind: "applying"; rows: Row[] }
@@ -26,6 +27,23 @@ type State =
   | { kind: "error"; message: string };
 
 const MAX_BYTES = 10 * 1024 * 1024;
+
+/**
+ * Where the books to bring in come from: a Goodreads file the reader picks,
+ * or a service read on their behalf (Hardcover). A loader answers with the
+ * books, or with a message to show.
+ */
+export type ImportSource =
+  | { kind: "file" }
+  | {
+      kind: "loader";
+      start: string;
+      again: string;
+      loading: (count: number) => string;
+      /** "{total} … {found}" for the review */
+      summary: string;
+      load: (progress: (count: number) => void) => Promise<GoodreadsBook[] | string>;
+    };
 
 /** A catalogue work, or one of the reader's own books, as the matcher, the picker and the library see it. */
 type Known = { slug: string; label: string; snapshot: WorkSnapshot; match: MatchWork; title_en: string | null; author_en: string | null; year: number | null };
@@ -63,31 +81,41 @@ async function knownBooks(works: WorkNames[], locale: Locale): Promise<Map<strin
 export function GoodreadsTransfer({ locale, labels, works }: { locale: Locale; labels: Labels; works: WorkNames[] }) {
   return (
     <div className="space-y-14">
-      <ImportSection locale={locale} labels={labels} works={works} />
+      <ImportSection locale={locale} labels={labels} works={works} source={{ kind: "file" }} title={labels.importTitle} intro={labels.importSteps} id="gr-import" />
       <ExportSection locale={locale} labels={labels} works={works} />
     </div>
   );
 }
 
-function ImportSection({ locale, labels, works }: { locale: Locale; labels: Labels; works: WorkNames[] }) {
+export function ImportSection({
+  locale,
+  labels,
+  works,
+  source,
+  title,
+  intro,
+  id,
+}: {
+  locale: Locale;
+  labels: Labels;
+  works: WorkNames[];
+  source: ImportSource;
+  title: string;
+  intro: string;
+  id: string;
+}) {
   const input = useRef<HTMLInputElement>(null);
   const [state, setState] = useState<State>({ kind: "idle" });
   const [known, setKnown] = useState<Map<string, Known> | null>(null);
   const [opts, setOpts] = useState({ shelves: true, reviews: true, replace: false });
   const n = (x: number) => formatNumber(x, locale);
 
-  const read = async (file: File) => {
-    if (file.size > MAX_BYTES) return setState({ kind: "error", message: labels.tooBig });
+  /** Reads the books (from a file or a service), then matches them with ours for the reader to review. */
+  const begin = async (load: () => Promise<GoodreadsBook[] | string>) => {
     setState({ kind: "reading" });
     try {
-      const [{ parseGoodreads, GoodreadsError, MAX_ROWS }, { MatchIndex, matchAll }] = await Promise.all([import("@/lib/transfer/goodreads"), import("@/lib/transfer/match")]);
-      let books: GoodreadsBook[];
-      try {
-        books = parseGoodreads(await file.text());
-      } catch (e) {
-        const code = e instanceof GoodreadsError ? e.code : "failed";
-        return setState({ kind: "error", message: t(labels[code], { max: n(MAX_ROWS) }) });
-      }
+      const [books, { MatchIndex, matchAll }] = await Promise.all([load(), import("@/lib/transfer/match")]);
+      if (typeof books === "string") return setState({ kind: "error", message: books });
       const all = await knownBooks(works, locale);
       setKnown(all);
       setState({ kind: "matching", done: 0, total: books.length });
@@ -95,9 +123,25 @@ function ImportSection({ locale, labels, works }: { locale: Locale; labels: Labe
       const matches = await matchAll(index, books, (done) => setState({ kind: "matching", done, total: books.length }));
       setState({ kind: "review", rows: books.map((book, i) => ({ book, match: matches[i], choice: matches[i].slug ?? "" })) });
     } catch (e) {
-      console.warn("[goodreads]", e);
+      console.warn("[import]", e);
       setState({ kind: "error", message: labels.failed });
     }
+  };
+
+  const readFile = (file: File) =>
+    begin(async () => {
+      if (file.size > MAX_BYTES) return labels.tooBig;
+      const { parseGoodreads, GoodreadsError, MAX_ROWS } = await import("@/lib/transfer/goodreads");
+      try {
+        return parseGoodreads(await file.text());
+      } catch (e) {
+        return t(labels[e instanceof GoodreadsError ? e.code : "failed"], { max: n(MAX_ROWS) });
+      }
+    });
+
+  const start = () => {
+    if (source.kind === "file") input.current?.click();
+    else void begin(() => source.load((count) => setState({ kind: "reading", count })));
   };
 
   const apply = async (rows: Row[]) => {
@@ -112,7 +156,7 @@ function ImportSection({ locale, labels, works }: { locale: Locale; labels: Labe
         .join(" ");
       setState({ kind: "done", text });
     } catch (e) {
-      console.warn("[goodreads]", e);
+      console.warn("[import]", e);
       setState({ kind: "error", message: labels.failed });
     }
   };
@@ -120,30 +164,32 @@ function ImportSection({ locale, labels, works }: { locale: Locale; labels: Labe
   const busy = state.kind === "reading" || state.kind === "matching" || state.kind === "applying";
 
   return (
-    <section aria-labelledby="gr-import" className="space-y-5">
-      <h2 id="gr-import" className="text-2xl sm:text-3xl">
-        {labels.importTitle}
+    <section aria-labelledby={id} className="space-y-5">
+      <h2 id={id} className="text-2xl sm:text-3xl">
+        {title}
       </h2>
-      <p className="max-w-2xl text-fg-muted">{labels.importSteps}</p>
+      <p className="max-w-2xl text-fg-muted">{intro}</p>
 
-      <input
-        ref={input}
-        type="file"
-        accept=".csv,text/csv"
-        className="sr-only"
-        tabIndex={-1}
-        aria-label={labels.chooseFile}
-        data-testid="goodreads-file"
-        onChange={(e) => {
-          const file = e.target.files?.[0];
-          e.target.value = "";
-          if (file) void read(file);
-        }}
-      />
+      {source.kind === "file" ? (
+        <input
+          ref={input}
+          type="file"
+          accept=".csv,text/csv"
+          className="sr-only"
+          tabIndex={-1}
+          aria-label={labels.chooseFile}
+          data-testid="goodreads-file"
+          onChange={(e) => {
+            const file = e.target.files?.[0];
+            e.target.value = "";
+            if (file) void readFile(file);
+          }}
+        />
+      ) : null}
       {state.kind === "idle" || state.kind === "error" ? (
-        <button type="button" onClick={() => input.current?.click()} className="inline-flex h-11 items-center gap-2 rounded-control bg-cloth px-5 text-on-cloth hover:bg-cloth-raised">
-          <FileUp aria-hidden className="size-4" />
-          {labels.chooseFile}
+        <button type="button" onClick={start} className="inline-flex h-11 items-center gap-2 rounded-control bg-cloth px-5 text-on-cloth hover:bg-cloth-raised">
+          {source.kind === "file" ? <FileUp aria-hidden className="size-4" /> : <CloudDownload aria-hidden className="size-4" />}
+          {source.kind === "file" ? labels.chooseFile : source.start}
         </button>
       ) : null}
 
@@ -157,7 +203,11 @@ function ImportSection({ locale, labels, works }: { locale: Locale; labels: Labe
       {state.kind === "reading" || state.kind === "matching" ? (
         <p role="status" className="flex items-center gap-2 text-fg-muted">
           <LoaderCircle aria-hidden className="size-4 animate-spin motion-reduce:animate-none" />
-          {state.kind === "reading" ? labels.reading : t(labels.matching, { done: n(state.done), total: n(state.total) })}
+          {state.kind === "reading"
+            ? source.kind === "loader"
+              ? source.loading(state.count ?? 0)
+              : labels.reading
+            : t(labels.matching, { done: n(state.done), total: n(state.total) })}
         </p>
       ) : null}
 
@@ -172,7 +222,9 @@ function ImportSection({ locale, labels, works }: { locale: Locale; labels: Labe
           onOpts={setOpts}
           onChoose={(i, slug) => setState((s) => (s.kind === "review" ? { ...s, rows: s.rows.map((r, j) => (j === i ? { ...r, choice: slug } : r)) } : s))}
           onApply={() => state.kind === "review" && void apply(state.rows)}
-          onStartOver={() => input.current?.click()}
+          onStartOver={start}
+          summary={source.kind === "loader" ? source.summary : labels.summary}
+          again={source.kind === "loader" ? source.again : labels.startOver}
         />
       ) : null}
 
@@ -186,8 +238,8 @@ function ImportSection({ locale, labels, works }: { locale: Locale; labels: Labe
             <Link href={localizedPath(locale, "/library")} className="inline-flex h-11 items-center rounded-control bg-cloth px-5 text-on-cloth hover:bg-cloth-raised">
               {labels.openLibrary}
             </Link>
-            <button type="button" onClick={() => input.current?.click()} className="h-11 rounded-control border border-line-strong px-4 hover:bg-sunken">
-              {labels.startOver}
+            <button type="button" onClick={start} className="h-11 rounded-control border border-line-strong px-4 hover:bg-sunken">
+              {source.kind === "loader" ? source.again : labels.startOver}
             </button>
           </div>
         </div>
@@ -207,6 +259,8 @@ function Review({
   onChoose,
   onApply,
   onStartOver,
+  summary,
+  again,
 }: {
   locale: Locale;
   labels: Labels;
@@ -218,6 +272,8 @@ function Review({
   onChoose: (i: number, slug: string) => void;
   onApply: () => void;
   onStartOver: () => void;
+  summary: string;
+  again: string;
 }) {
   const n = (x: number) => formatNumber(x, locale);
   const groups = useMemo(() => {
@@ -242,7 +298,7 @@ function Review({
   return (
     <div className="space-y-8">
       <div className="space-y-3">
-        <p>{t(labels.summary, { total: n(rows.length), found: n(found) })}</p>
+        <p>{t(summary, { total: n(rows.length), found: n(found) })}</p>
         <dl className="flex flex-wrap gap-x-6 gap-y-1 text-sm text-fg-muted">
           {(
             [
@@ -309,7 +365,7 @@ function Review({
           {busy ? labels.applying : t(labels.apply, { count: n(chosen) })}
         </button>
         <button type="button" disabled={busy} onClick={onStartOver} className="h-11 rounded-control px-4 text-fg-muted hover:bg-sunken hover:text-fg disabled:opacity-50">
-          {labels.startOver}
+          {again}
         </button>
         {!chosen ? <p className="text-sm text-fg-muted">{labels.nothingChosen}</p> : null}
       </div>
@@ -317,7 +373,7 @@ function Review({
   );
 }
 
-function Check3({ checked, disabled, onChange, label, hint }: { checked: boolean; disabled?: boolean; onChange: (v: boolean) => void; label: string; hint?: string }) {
+export function Check3({ checked, disabled, onChange, label, hint }: { checked: boolean; disabled?: boolean; onChange: (v: boolean) => void; label: string; hint?: string }) {
   return (
     <label className={cn("flex items-start gap-3", disabled && "opacity-60")}>
       <input type="checkbox" checked={checked} disabled={disabled} onChange={(e) => onChange(e.target.checked)} className="mt-1 size-4 shrink-0 accent-[var(--color-cloth)]" />

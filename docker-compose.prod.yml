@@ -17,6 +17,11 @@ services:
     restart: unless-stopped
     environment:
       REVALIDATE_SECRET: ${REVALIDATE_SECRET}
+      # connections (optional; unset = shown as not available)
+      CONNECTIONS_KEY: ${CONNECTIONS_KEY:-}
+      HARDCOVER_CLIENT_ID: ${HARDCOVER_CLIENT_ID:-}
+      HARDCOVER_CLIENT_SECRET: ${HARDCOVER_CLIENT_SECRET:-}
+      HARDCOVER_REDIRECT_URI: ${HARDCOVER_REDIRECT_URI:-}
     volumes:
       # incremental cache (revalidated catalog pages) survives restarts
       - next-cache:/app/.next/cache

@@ -43,6 +43,29 @@ REVALIDATE_SECRET=<long random string>
 `NEXT_PUBLIC_*` values are baked in at build time. The service-role key is
 **not** needed by the web server.
 
+### Connections (Hardcover, Readwise; optional)
+
+Without these, the profile shows both as "not available".
+
+```
+CONNECTIONS_KEY=<openssl rand -base64 32>
+HARDCOVER_CLIENT_ID=<from Hardcover>
+HARDCOVER_CLIENT_SECRET=<from Hardcover>
+```
+
+- **`CONNECTIONS_KEY`** seals readers' tokens before they are stored (decision
+  18). Keep it with your other secrets and back it up: if it is lost or
+  changed, every reader has to connect again. Readwise needs nothing else.
+- **Hardcover:** register an OAuth application with Hardcover as a
+  confidential (server) client, with the redirect URI
+  `https://<domain>/api/connections/hardcover/callback` and the scopes
+  `read:me:content read:library write:library read:catalog:search`. Set
+  `HARDCOVER_REDIRECT_URI` only if the site is reached at a different origin
+  than the one it sees (the redirect URI must match the registered one
+  exactly).
+- Both services are called from the server: allow outbound HTTPS to
+  `api.hardcover.app` and `readwise.io` if egress is restricted.
+
 ### Accounts (Supabase Auth)
 
 In the Supabase dashboard (or `supabase/config.toml` for self-hosting):

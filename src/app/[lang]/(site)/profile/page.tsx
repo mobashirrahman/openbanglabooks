@@ -1,8 +1,10 @@
 import type { Metadata } from "next";
+import { Suspense } from "react";
 import { DeviceData, ThemePreference } from "@/components/profile/preferences";
 import { AccountPanel } from "@/components/account/account-panel";
 import { LanguageSwitch } from "@/components/nav/language-switch";
 import { AppSection } from "@/components/offline/app-section";
+import { ConnectionsSection } from "@/components/connections/connections-section";
 import { getDictionary, getLocale } from "@/lib/i18n";
 
 export async function generateMetadata(): Promise<Metadata> {
@@ -20,6 +22,13 @@ export default async function ProfilePage() {
         <section className="grid gap-4 py-8 sm:grid-cols-[12rem_1fr]">
           <h2 className="text-xl">{dict.account.title}</h2>
           <AccountPanel locale={locale} labels={dict.account} syncLabels={dict.sync} editLabel={dict.admin.editCatalog} />
+        </section>
+        <section id="connections" className="grid scroll-mt-20 gap-4 py-8 sm:grid-cols-[12rem_1fr]">
+          <h2 className="text-xl">{dict.connections.title}</h2>
+          {/* the reader's choices come back from Hardcover in the address (?hardcover=…) */}
+          <Suspense fallback={<div className="min-h-24" aria-busy />}>
+            <ConnectionsSection locale={locale} labels={dict.connections} />
+          </Suspense>
         </section>
         <section className="grid gap-4 py-8 sm:grid-cols-[12rem_1fr]">
           <h2 className="text-xl">{dict.profile.theme}</h2>

@@ -24,7 +24,8 @@ published, each with its source and rights basis recorded.
 | Accounts (emailed code or link), sync across devices, shelves, ratings, reflections, history | Done (Phase 2) |
 | Admin: works, authors, editions, validated EPUB upload, genres, collections | Done (Phase 2, editors only) |
 | Offline app (service worker, installable), your own EPUBs (device-only unless kept in the account), Goodreads import/export | Done (Phase 3) |
-| Hardcover and Readwise connections; performance and accessibility pass | In progress (Phase 3) |
+| Hardcover (OAuth: shelves in and out) and Readwise (highlights out), tokens sealed on the server | Done (Phase 3, needs per-site setup: [docs/deploy.md](docs/deploy.md)) |
+| Performance and accessibility pass | In progress (Phase 3) |
 
 ## Stack
 
@@ -60,7 +61,7 @@ Useful scripts:
 | `pnpm test:e2e` | Browser tests at six viewports in Chromium and WebKit (needs a running build on :3100, see below) |
 | `pnpm test:e2e:webkit` | The WebKit (Safari engine) projects only |
 | `pnpm typecheck` | Route type generation + `tsc` |
-| `pnpm db:test` | Database tests (pgTAP): personal data isolation, sync rules, catalogue permissions |
+| `pnpm db:test` | Database tests (pgTAP): personal data isolation, sync rules, catalogue permissions, connection secrets |
 
 ## Testing
 
@@ -84,6 +85,15 @@ another folder and point the tests at its port:
 ```bash
 NEXT_DIST_DIR=.next-e2e pnpm build && NEXT_DIST_DIR=.next-e2e pnpm start -p 3101 &
 E2E_PORT=3101 pnpm test:e2e
+```
+
+The connection tests talk to stand-ins for Hardcover and Readwise
+(`tests/e2e/mock-upstreams.ts`, which Playwright starts on :3199). Start the
+server with their test-only settings, or those tests skip themselves:
+
+```bash
+set -a; . tests/e2e/upstreams.env; set +a
+NEXT_DIST_DIR=.next-e2e pnpm start -p 3101 &
 ```
 
 Browser tests block the service worker (it would answer requests that tests

@@ -36,7 +36,7 @@ export async function clearAccountData() {
       await db.personalCovers.delete(b.id);
       await db.files.delete(b.fileSha);
     }
-    await db.meta.bulkDelete(["owner", "sync-cursor", "last-synced"]);
+    await db.meta.bulkDelete(["owner", "sync-cursor", "last-synced", "readwise:sent-at", "hardcover:books"]);
   });
   markHasProgress((await db.positions.count()) > 0);
 }

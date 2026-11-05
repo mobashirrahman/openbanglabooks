@@ -64,6 +64,9 @@ export function AccountPanel({
       // files kept in the account go first (only the Storage API can remove them)
       const { removeAllAccountFiles } = await import("@/lib/personal/store");
       await removeAllAccountFiles();
+      // connections are withdrawn at the services too (best effort: the rows go with the account anyway)
+      const { disconnectAll } = await import("@/lib/connections/actions");
+      await disconnectAll().catch(() => null);
       const { error } = await sb.rpc("delete_my_account");
       if (error) throw error;
       const engine = await import("@/lib/sync/engine");

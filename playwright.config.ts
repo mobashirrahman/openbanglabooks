@@ -66,12 +66,23 @@ export default defineConfig({
       use: { ...devices["iPhone 13"] },
     },
   ],
-  webServer: process.env.E2E_BASE_URL
-    ? undefined
-    : {
-        command: `pnpm start -p ${PORT}`,
-        url: baseURL,
-        reuseExistingServer: true,
-        timeout: 120_000,
-      },
+  webServer: [
+    // Hardcover and Readwise stand-ins (the app reaches them when started with tests/e2e/upstreams.env)
+    {
+      command: "node tests/e2e/mock-upstreams.ts",
+      url: "http://127.0.0.1:3199/__health",
+      reuseExistingServer: true,
+      timeout: 15_000,
+    },
+    ...(process.env.E2E_BASE_URL
+      ? []
+      : [
+          {
+            command: `set -a; . tests/e2e/upstreams.env; set +a; pnpm start -p ${PORT}`,
+            url: baseURL,
+            reuseExistingServer: true,
+            timeout: 120_000,
+          },
+        ]),
+  ],
 });

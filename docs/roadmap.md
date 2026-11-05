@@ -111,6 +111,14 @@ Everything is stored locally with `updatedAt` on every row, ready for sync.
   and adds them with status, rating, dates, shelves and (by choice) reviews
   as private reflections. The library goes back out as a Goodreads-format
   file.
+- **Hardcover and Readwise** ([decision 18](decisions.md#18-hardcover-and-readwise-the-readers-own-accounts-used-when-asked)):
+  a "Connections" section on the profile. Hardcover connects through its
+  own consent screen (OAuth with PKCE); `/library/hardcover` brings the
+  reader's shelves in through the Goodreads review step, and sends the
+  library out, every unsure book confirmed first. Readwise takes the
+  reader's token and receives their highlights and notes, new ones or all,
+  each linked back to its passage. Tokens are sealed on the server and
+  never reach the browser.
 
 ### Known limitations (Phase 3 so far)
 
@@ -132,6 +140,16 @@ Everything is stored locally with `updatedAt` on every row, ready for sync.
 - **Goodreads' own import matches by ISBN first.** Our editions have none,
   so on Goodreads the exported books are found by title and author, and a
   Bengali-only title may not be found there.
+- **Connections need setting up per site.** Hardcover needs a registered
+  OAuth application (client id, secret and redirect URI) and both need
+  `CONNECTIONS_KEY`; without them the profile says "not available". They
+  were verified against stand-ins that follow the documentation, not yet
+  against the live services.
+- **Deleting a highlight here does not delete it in Readwise,** and
+  Hardcover reviews and journal entries do not move either way (see
+  decision 18 for why).
+- **Hardcover matches are remembered per device.** A second device asks
+  again about the books that were unsure the first time.
 - **A flaky page-turn test.** "A tap while the leaf is still turning"
   fails about one run in six in WebKit at desktop sizes on a loaded test
   machine (the second tap is lost). Reader code is unchanged in Phase 3;

@@ -17,9 +17,12 @@ export default async function LibraryPage() {
     <div className="mx-auto max-w-6xl px-4 pt-10 sm:px-6 sm:pt-14 lg:px-8">
       <h1 className="text-4xl sm:text-5xl">{dict.library.title}</h1>
       <p className="mt-2 text-fg-muted">{dict.library.description}</p>
-      <p className="mt-1 mb-8 text-sm">
+      <p className="mt-1 mb-8 flex flex-wrap gap-x-5 gap-y-1 text-sm">
         <Link href={localizedPath(locale, "/library/goodreads")} className="text-link underline-offset-4 hover:underline">
           {dict.transfer.link}
+        </Link>
+        <Link href={localizedPath(locale, "/library/hardcover")} className="text-link underline-offset-4 hover:underline">
+          {dict.connections.hcLink}
         </Link>
       </p>
       <div className="mb-12">

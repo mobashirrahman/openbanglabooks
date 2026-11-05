@@ -291,3 +291,76 @@ matched in the browser; nothing is uploaded.
   later import here uses to match exactly. Reflections go out only when the
   reader ticks the box, and as Private Notes, never as public reviews.
   Cells that a spreadsheet would run as formulas are escaped.
+
+## 18. Hardcover and Readwise: the reader's own accounts, used when asked
+
+Both connections act for one reader, with that reader's permission, and
+only when the reader presses a button. Nothing runs in the background.
+Both services' documentation was re-checked on 2026-11-05.
+
+- **Hardcover: OAuth.** Hardcover asks apps that people sign into to use
+  OAuth, never a pasted personal token, and to call its API from a server.
+  The app is a confidential client: authorization code with PKCE (S256),
+  the client secret sent over HTTP Basic, and a check of the `iss` in the
+  redirect (RFC 9207). The state, the PKCE verifier and the return path
+  wait in a short-lived (ten minutes) httpOnly cookie, sealed to the
+  signed-in reader. Scopes: `read:me:content read:library write:library
+  read:catalog:search`, and nothing more.
+- **Refresh tokens rotate.** Hardcover's access tokens last a week and its
+  refresh tokens six months; each refresh returns a new pair, and using a
+  refresh token twice revokes the whole chain. So refreshing is serialised
+  by a lease in the database (`connection_lease`), and new tokens are only
+  stored for the version that was leased (`connection_rotate`): two
+  requests cannot both spend the same refresh token. A refused refresh
+  (`invalid_grant`) removes the connection and asks the reader to connect
+  again.
+- **Readwise: the reader's token.** Readwise has no OAuth; the access token
+  from readwise.io/access_token is its documented way in. It is checked
+  with Readwise (`GET /api/v2/auth/`) before it is kept.
+- **Sealed, server-side.** Tokens are sealed with AES-256-GCM
+  (`CONNECTIONS_KEY`, held only by the web server) before they reach the
+  database; the additional data names the reader and the service, so a
+  sealed value copied to another row does not open. The `connections` table
+  has row-level security and no policies at all: readers reach their own
+  row only through `security definer` functions that take the user from
+  the session, and never get a token back in the browser. No service-role
+  key is involved. Without `CONNECTIONS_KEY` (and, for Hardcover, a
+  registered client), the connections show as not available.
+- **Bringing Hardcover books in** reads the reader's shelves and feeds them
+  through the same matching and review as a Goodreads file (§17). Ratings
+  are rounded to whole stars; "paused" counts as reading; books marked
+  "ignored" there are left out. Hardcover reviews and notes are not
+  brought in.
+- **Sending books to Hardcover.** Each book is looked up in Hardcover's
+  catalogue and matched with the same phonetic matching, the other way
+  round; the reader confirms every unsure one. New books are added with
+  `imported: true` (no posts to the reader's followers). For books already
+  there, the status follows ours and a rating is only added where there is
+  none. The confirmed Hardcover book is remembered on the device so the
+  next send needs no second look. A reader's own books are never sent.
+- **Sending highlights to Readwise.** New or changed highlights since the
+  last send, or all of them on request, each with a link back to the
+  passage here as its `highlight_url`, so sending one again updates it
+  instead of adding another. Highlights in a reader's own books go only if
+  the book is kept in the account and the reader ticks the box; a copy kept
+  after an edit conflict is never sent.
+- **What is not supported, and said so.** A highlight deleted here stays
+  in Readwise (the profile says so). Readwise can delete a highlight by its
+  id (`DELETE /api/v2/highlights/<id>/`), but creating highlights answers
+  with the ids changed per book, not per highlight, so we do not know which
+  id is which without listing them back (a far tighter limit: 20 a
+  minute). Deleting there is left for later. Hardcover reviews, journal entries and reading dates beyond
+  "finished on" do not move in either direction. Readwise allows 240 requests
+  a minute and says when to wait (`Retry-After`), which we do. Hardcover's
+  limit is a bucket of ten tokens refilled at 60 a minute, where every
+  top-level field of a request costs one: each call from the browser
+  spends at most the bucket, and the browser keeps its own copy of the
+  bucket and waits before a call that would overdraw it. A large library
+  takes minutes (about a book a second), and the page says so.
+- **Leaving.** Disconnecting revokes Hardcover's tokens at Hardcover and
+  deletes the row; deleting the account does the same for every connection
+  first, and the rows go with the account in any case.
+- **Tests** run against stand-ins for both services
+  (`tests/e2e/mock-upstreams.ts`) that follow the documented behaviour:
+  PKCE, Basic client auth, rotating refresh tokens that revoke the chain
+  when replayed, and highlight updates by `highlight_url`.
