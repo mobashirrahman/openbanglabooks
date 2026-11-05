@@ -21,9 +21,7 @@ Catalog, reader, local library, SEO, brand, deployment files. See the README.
   are tested in both engines, but Playwright's WebKit cannot create
   synthetic touch events, so dragging the leaf in Safari has not been
   exercised automatically. Firefox turns pages with the slide.
-- **No offline app shell yet.** Books you have opened are cached in
-  IndexedDB and reopen offline, but the pages around them need a network
-  until the service worker lands (Phase 3).
+- ~~No offline app shell yet.~~ The service worker landed in Phase 3.
 - **Catalog size.** 14 works. পথের পাঁচালী and দুর্গেশনন্দিনী are waiting for
   Wikisource transcription; Kazi Nazrul Islam is in copyright in BD/IN until
   the end of 2036.
@@ -91,3 +89,50 @@ Everything is stored locally with `updatedAt` on every row, ready for sync.
   polish.
 - **Polish:** reading goals, performance tuning on mid-range Android, a
   final accessibility and motion review.
+
+### Done so far
+
+- **Offline and installable:** a service worker of our own
+  ([decision 15](decisions.md#15-offline-a-small-service-worker-of-our-own)).
+  The library, notes, profile and every page visited open without a
+  network; books opened once read offline, including links to a passage;
+  `/offline` lists the books on the device. The profile has an "App"
+  section to install it (or how to, on iOS). The manifest has shortcuts to
+  the library and notes.
+- **Your own EPUBs** ([decision 16](decisions.md#16-a-readers-own-books-on-the-device-unless-asked)):
+  "Add your own book" in the library (or drop a file on the page) checks,
+  cleans and repacks the book on the device. It stays there, with its
+  highlights and notes, until the reader chooses "Keep in my account";
+  then it follows them to their other devices. DRM-protected books are
+  refused with a reason.
+- **Goodreads** ([decision 17](decisions.md#17-goodreads-a-file-matched-by-sound)):
+  `/library/goodreads` reads a Goodreads export, finds its Bengali books in
+  the catalogue across spellings and scripts, asks about the doubtful ones,
+  and adds them with status, rating, dates, shelves and (by choice) reviews
+  as private reflections. The library goes back out as a Goodreads-format
+  file.
+
+### Known limitations (Phase 3 so far)
+
+- **Offline needs one online visit.** The worker installs on the first
+  visit; pages never opened are not kept (the offline page says so and
+  offers the books that are). Safari may clear a site's storage after
+  about seven days unused unless it is installed to the home screen; books
+  and pages then download again.
+- **Device-only books are not backed up.** That is the promise, and the
+  risk: a lost phone loses them. The import dialog and the library say
+  where each book lives.
+- **Own books lose what is not text.** Cleaning removes scripts, forms and
+  anything fetched from outside the book (remote images, fonts, styles), so
+  an EPUB that relies on them reads plainer than in its own app.
+- **Goodreads has no "date started" in its export,** so imported books keep
+  only the date added and the date read. Most of a typical Goodreads
+  library is not in our catalogue (public-domain Bengali only); those rows
+  are listed and left out.
+- **Goodreads' own import matches by ISBN first.** Our editions have none,
+  so on Goodreads the exported books are found by title and author, and a
+  Bengali-only title may not be found there.
+- **A flaky page-turn test.** "A tap while the leaf is still turning"
+  fails about one run in six in WebKit at desktop sizes on a loaded test
+  machine (the second tap is lost). Reader code is unchanged in Phase 3;
+  to be looked at in the polish step.

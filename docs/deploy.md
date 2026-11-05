@@ -88,6 +88,12 @@ The build prerenders every book page, so the database must be reachable from
 the build. Caddy obtains certificates automatically once DNS points at the
 server (ports 80 and 443 open).
 
+The site must be served over HTTPS (or `localhost`): the service worker,
+installing the app and importing a reader's own EPUB (which hashes the file
+with WebCrypto) work only in a secure context. Do not cache `/sw.js` or
+`/sw-core.js` at a proxy or CDN; both are sent with `no-cache` so a new
+build reaches readers on their next visit.
+
 ## 5. After deploying
 
 - Regenerate social images against the live site: `pnpm render:og --base https://openbanglabooks.com`, commit, redeploy.

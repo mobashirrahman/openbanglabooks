@@ -23,7 +23,8 @@ published, each with its source and rights basis recorded.
 | Content: 14 verified works ingested from Bengali Wikisource | Done |
 | Accounts (emailed code or link), sync across devices, shelves, ratings, reflections, history | Done (Phase 2) |
 | Admin: works, authors, editions, validated EPUB upload, genres, collections | Done (Phase 2, editors only) |
-| Goodreads/Hardcover/Readwise, personal EPUB import, service worker (Phase 3) | Not started |
+| Offline app (service worker, installable), your own EPUBs (device-only unless kept in the account), Goodreads import/export | Done (Phase 3) |
+| Hardcover and Readwise connections; performance and accessibility pass | In progress (Phase 3) |
 
 ## Stack
 
@@ -76,6 +77,17 @@ The account, sync and admin tests need the local Supabase stack: sign-in
 emails are read from Mailpit (http://127.0.0.1:54324), and the admin test
 uses the service-role key from `.env.local` to make its test account an
 editor and to remove the rows it created.
+
+To test a new build while a server is still running from `.next`, build into
+another folder and point the tests at its port:
+
+```bash
+NEXT_DIST_DIR=.next-e2e pnpm build && NEXT_DIST_DIR=.next-e2e pnpm start -p 3101 &
+E2E_PORT=3101 pnpm test:e2e
+```
+
+Browser tests block the service worker (it would answer requests that tests
+intercept); `offline.spec.ts` turns it on and tests reading without a network.
 
 Viewports: 375×812, 390×844, 768×1024, 1024×768, 1440×900, 1920×1080, each in
 two engines:
