@@ -101,6 +101,34 @@ test.describe("page turns", () => {
     expect(await cfi()).toBe(a);
   });
 
+  test("a click pressed before a turn and released during it is not lost", async ({ page }, info) => {
+    test.skip(!!info.project.use.hasTouch, "a mouse: pressed on the book, released on the turn's overlay");
+    await openOnText(page);
+    const cfi = async () => (await readerState(page)).cfi;
+    const a = await cfi();
+    const box = (await page.locator("foliate-view").boundingBox())!;
+    await page.mouse.move(box.x + box.width * 0.92, box.y + box.height / 2);
+    await page.mouse.down();
+    // a turn starts under the pressed button (the keyboard here; a second finger or a swipe in life)
+    await page.keyboard.press("ArrowRight");
+    await page.waitForFunction(() => document.documentElement.dataset.curl !== undefined, null, { polling: "raf" });
+    await page.mouse.up();
+    await expect.poll(() => page.evaluate(() => document.documentElement.dataset.curl ?? ""), { timeout: 10_000 }).toBe("");
+    await page.waitForTimeout(600);
+    // two pages on: the key's and the click's
+    const turnBack = async () => {
+      const before = await cfi();
+      await page.keyboard.press("ArrowLeft");
+      await expect.poll(cfi, { timeout: 10_000 }).not.toBe(before);
+      await expect.poll(() => page.evaluate(() => document.documentElement.dataset.curl ?? ""), { timeout: 10_000 }).toBe("");
+      await page.waitForTimeout(300);
+    };
+    await turnBack();
+    expect(await cfi()).not.toBe(a);
+    await turnBack();
+    expect(await cfi()).toBe(a);
+  });
+
   test("on a touch screen the page follows the finger; a short drag lays it back", async ({ page }, info) => {
     test.skip(!info.project.use.hasTouch, "touch screens");
     // Playwright's WebKit can't build synthetic touch events (no Touch constructor, and

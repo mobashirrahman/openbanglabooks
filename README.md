@@ -25,7 +25,7 @@ published, each with its source and rights basis recorded.
 | Admin: works, authors, editions, validated EPUB upload, genres, collections | Done (Phase 2, editors only) |
 | Offline app (service worker, installable), your own EPUBs (device-only unless kept in the account), Goodreads import/export | Done (Phase 3) |
 | Hardcover (OAuth: shelves in and out) and Readwise (highlights out), tokens sealed on the server | Done (Phase 3, needs per-site setup: [docs/deploy.md](docs/deploy.md)) |
-| Performance and accessibility pass | In progress (Phase 3) |
+| Performance (mid-range Android, slow 4G) and accessibility pass | Done (Phase 3) |
 
 ## Stack
 
@@ -114,6 +114,15 @@ on a physical iPhone. It needs system libraries once:
 `sudo pnpm exec playwright install-deps webkit`.
 
 Screenshots for visual review land in `test-results/screenshots/<project>/`.
+
+Performance is measured as a mid-range Android phone on slow 4G would see it
+(Chromium, CPU slowed 4×, Lighthouse's mobile network), each page loaded cold
+three times, medians printed:
+
+```bash
+node scripts/perf.ts --base http://localhost:3100            # every page
+node scripts/perf.ts --base http://localhost:3100 --only reader,home --runs 5
+```
 
 ## Project layout
 

@@ -33,7 +33,8 @@ export function AccountPanel({
   const [message, setMessage] = useState<string | null>(null);
 
   if (!accountsEnabled) return <p className="text-fg-muted">{labels.unavailable}</p>;
-  if (account.status === "loading") return <div className="h-24 animate-pulse rounded-control bg-sunken" aria-busy />;
+  // as tall as the signed-out panel (what a first visit shows), so the sections below do not jump
+  if (account.status === "loading") return <div className="h-[196px] animate-pulse rounded-control bg-sunken sm:h-[168px]" aria-busy />;
 
   if (account.status === "signed-out") {
     return (

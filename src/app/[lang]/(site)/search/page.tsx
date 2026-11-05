@@ -18,9 +18,12 @@ export default async function SearchPage({ searchParams }: PageProps<"/[lang]/se
   const locale = await getLocale();
   const dict = await getDictionary(locale);
   return (
-    <Suspense fallback={<ListSkeleton />}>
-      <SearchResults searchParams={searchParams} locale={locale} dict={dict} />
-    </Suspense>
+    // at least a screen tall: results shorter than the skeleton would otherwise pull the footer up into view
+    <div className="min-h-[100svh]">
+      <Suspense fallback={<ListSkeleton />}>
+        <SearchResults searchParams={searchParams} locale={locale} dict={dict} />
+      </Suspense>
+    </div>
   );
 }
 

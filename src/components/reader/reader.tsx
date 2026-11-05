@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { useLiveQuery } from "dexie-react-hooks";
 import { localDB, type WorkSnapshot } from "@/lib/local/db";
-import { createEngine, type Engine, type Relocation } from "@/lib/reader/engine";
+import { createEngine, warmEngine, type Engine, type Relocation } from "@/lib/reader/engine";
 import { loadEpubBytes, OfflineError } from "@/lib/reader/epub-loader";
 import { columnsFor, frameSize, pageGeometry } from "@/lib/reader/layout";
 import { installFontFaces, readerCss } from "@/lib/reader/styles";
@@ -362,6 +362,7 @@ export function Reader(props: ReaderProps) {
     let engine: (Engine & { start(): Promise<void> }) | null = null;
     (async () => {
       try {
+        warmEngine();
         const [bytes, saved] = await Promise.all([loadEpubBytes(fileSha, fileUrl), getPosition(work.slug, fileSha)]);
         if (cancelled || !hostRef.current) return;
         const initial = props.initial.cfi || props.initial.href ? props.initial : initialFromUrl();
@@ -498,19 +499,30 @@ export function Reader(props: ReaderProps) {
   // tap lands on <html> instead of the book (and WebKit sends no click for it at
   // all). Someone flipping quickly taps again before the leaf has settled: those
   // taps still turn pages, read from pointerdown/pointerup.
+  //
+  // A tap can also straddle a turn's start or end: pressed on the book and
+  // released on the overlay that appeared meanwhile, or the other way round.
+  // The browser then sends no click to either, so every press is noted here
+  // (anyPress, in screen coordinates, the same in the book's frames): a
+  // release on the overlay completes any press, and a press that began on
+  // the overlay is completed wherever in the page it is released.
+  const anyPress = useRef<Press | null>(null);
+  const overlayPress = useRef(false);
   useEffect(() => {
-    let press: Press | null = null;
-    const turning = () => {
-      const d = document.documentElement.dataset;
-      return d.curl !== undefined || d.fade !== undefined;
-    };
+    const root = document.documentElement;
+    const turning = () => root.dataset.curl !== undefined || root.dataset.fade !== undefined;
     const onDown = (e: PointerEvent) => {
-      press = e.target === document.documentElement && turning() ? pressOf(e, false) : null;
+      overlayPress.current = e.target === root && turning();
+      if (overlayPress.current) anyPress.current = pressOf(e, false); // presses on the book are noted by its own handlers
     };
     const onUp = (e: PointerEvent) => {
-      const start = press;
-      press = null;
-      if (!start || e.target !== document.documentElement || !isTap(start, e)) return;
+      const start = anyPress.current;
+      const fromOverlay = overlayPress.current;
+      anyPress.current = null;
+      overlayPress.current = false;
+      // released on the overlay, or (pressed on it) on the page once the overlay had gone: no click follows either way
+      if (!start || (e.target !== root && !fromOverlay) || start.selecting || !isTap(start, e)) return;
+      if (e.target !== root && (e.target as Element).closest?.("button, a")) return; // the desk's own controls
       // the same rule as on the book itself: with text selected, a tap only dismisses it
       if (anySelectionRef.current()) for (const c of engineRef.current?.contents() ?? []) c.doc.getSelection()?.removeAllRanges();
       else tapAt(e.clientX);
@@ -528,6 +540,8 @@ export function Reader(props: ReaderProps) {
   const hostPress = useRef<Press | null>(null);
   const onHostPointerDown = (e: React.PointerEvent) => {
     hostPress.current = pressOf(e.nativeEvent, anySelection());
+    anyPress.current = hostPress.current;
+    overlayPress.current = false;
   };
   const onHostClick = (e: React.MouseEvent) => {
     const press = hostPress.current;
@@ -550,6 +564,8 @@ export function Reader(props: ReaderProps) {
       // press itself has already collapsed it
       doc.addEventListener("pointerdown", (e) => {
         press = pressOf(e, hasSelection(doc));
+        anyPress.current = press;
+        overlayPress.current = false;
         bumpRef.current(); // reading, not away
       });
       doc.addEventListener("click", (e) => {

@@ -217,10 +217,34 @@ function routeTouches(target: EventTarget, handler: () => TouchHandler | null) {
     );
 }
 
+type EpubModule = { EPUB: new (l: unknown) => { init(): Promise<unknown> } };
 let foliateLoaded: Promise<unknown> | null = null;
+let epubLoaded: Promise<EpubModule> | null = null;
+// each loaded once; a failed load (a dropped connection) is forgotten, so that "try again" fetches it again
 function loadFoliate() {
-  foliateLoaded ??= import("@foliate/view.js");
+  foliateLoaded ??= import("@foliate/view.js").catch((e) => {
+    foliateLoaded = null;
+    throw e;
+  });
   return foliateLoaded;
+}
+function loadEpubModule() {
+  epubLoaded ??= (import("@foliate/epub.js") as Promise<EpubModule>).catch((e) => {
+    epubLoaded = null;
+    throw e;
+  });
+  return epubLoaded;
+}
+
+/**
+ * Starts fetching the reading engine's code while the book itself
+ * downloads, instead of after it (on a slow phone network these are
+ * seconds apart). The paginator is what the view loads when a book opens.
+ */
+export function warmEngine() {
+  void loadFoliate().catch(() => null);
+  void loadEpubModule().catch(() => null);
+  void import("@foliate/paginator.js").catch(() => null);
 }
 
 export async function createEngine(
@@ -229,11 +253,7 @@ export async function createEngine(
   { initialCfi, initialHref }: { initialCfi?: string | null; initialHref?: string | null },
   callbacks: EngineCallbacks,
 ): Promise<Engine & { start(): Promise<void> }> {
-  const [, loader, epubModule] = await Promise.all([
-    loadFoliate(),
-    makeLoader(bytes),
-    import("@foliate/epub.js") as Promise<{ EPUB: new (l: unknown) => { init(): Promise<unknown> } }>,
-  ]);
+  const [, loader, epubModule] = await Promise.all([loadFoliate(), makeLoader(bytes), loadEpubModule()]);
   const book = (await new epubModule.EPUB(loader).init()) as FoliateView["book"] & {
     transformTarget?: EventTarget;
   };

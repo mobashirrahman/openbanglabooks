@@ -230,6 +230,26 @@ test.describe("reader", () => {
     await expect.poll(cachedFiles, { timeout: 5_000 }).toBe(1);
   });
 
+  test("the closed book shows from the first paint, where the script then keeps it", async ({ browser }, info) => {
+    // placed by CSS in the server's HTML, so a slow phone sees the book, not an empty desk, while the code loads
+    const box = async (javaScriptEnabled: boolean) => {
+      const context = await browser.newContext({ ...info.project.use, javaScriptEnabled, serviceWorkers: "block" });
+      const page = await context.newPage();
+      // a slow book, so the closed cover stays while it is measured
+      await page.route("**/api/books/**", (r) => new Promise((res) => setTimeout(() => res(r.continue()), 4000)));
+      await page.goto("/read/gora");
+      const cover = page.locator(".opening-book");
+      await expect(cover.getByText("গোরা")).toBeVisible();
+      if (javaScriptEnabled) await page.waitForTimeout(800);
+      const b = (await cover.boundingBox())!;
+      await context.close();
+      return [b.x, b.y, b.width, b.height].map(Math.round);
+    };
+    const [css, js] = [await box(false), await box(true)];
+    expect(css[2]).toBeGreaterThan(100);
+    css.forEach((v, i) => expect(Math.abs(v - js[i]), `${css} vs ${js}`).toBeLessThanOrEqual(1));
+  });
+
   test("respects reduced motion", async ({ page }) => {
     await page.emulateMedia({ reducedMotion: "reduce" });
     await openReader(page);

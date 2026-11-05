@@ -76,7 +76,7 @@ Everything is stored locally with `updatedAt` on every row, ready for sync.
 - **Roles are set in SQL.** Making someone an editor:
   `update profiles set role = 'editor' where id = '<user id>';`
 
-## Phase 3 — ecosystem and refinement
+## Phase 3 — ecosystem and refinement (done)
 
 - **Goodreads:** CSV import/export with transliteration-aware matching and a
   manual resolution step (no live API).
@@ -90,7 +90,7 @@ Everything is stored locally with `updatedAt` on every row, ready for sync.
 - **Polish:** reading goals, performance tuning on mid-range Android, a
   final accessibility and motion review.
 
-### Done so far
+### Done
 
 - **Offline and installable:** a service worker of our own
   ([decision 15](decisions.md#15-offline-a-small-service-worker-of-our-own)).
@@ -119,8 +119,31 @@ Everything is stored locally with `updatedAt` on every row, ready for sync.
   reader's token and receives their highlights and notes, new ones or all,
   each linked back to its passage. Tokens are sealed on the server and
   never reach the browser.
+- **Performance** on a mid-range Android phone, as `node scripts/perf.ts`
+  measures it (Chromium at 412×915, CPU slowed 4×, slow 4G: 562 ms round
+  trips, 1.5 Mbit/s). The reader shows its closed book from the first paint
+  (FCP 10.5 s → 1.4 s) and its first page about 2.5 s sooner (10.7 s →
+  8.0 s): the page's HTML starts the book's download (skipped for a book
+  already on the device), the reading engine loads alongside it, and CSS
+  places the closed book before any script runs. Catalogue pages paint in
+  under 2 s; the search and profile pages no longer jump as they fill in
+  (layout shift ≤ 0.02 outside the reader; the profile's was 0.07). On a
+  desktop the header's language link was prefetched hundreds of times a
+  second (the other language is another root layout, a full page load
+  anyway): it is no longer prefetched.
+- **Accessibility and motion:** axe finds no serious or critical problems
+  on the reader's own pages (library, notes, profile, Goodreads, Hardcover,
+  offline, sign-in, search) in the light and the dark theme, as it already
+  did on the catalogue; the dark theme's red (delete, clear) was too dark
+  to read and is now lighter. With "reduce motion" the opening book does
+  not move, page turns fade, and every other transition is cut short.
+- **A lost tap:** a click pressed on the page just before a turn began
+  and released on the turning leaf was lost (the press and the release
+  landed on different elements; WebKit then sends no click). Such a click
+  now turns the next page, and a test presses it that way on purpose. It
+  was one cause of the flaky page-turn test; the other is below.
 
-### Known limitations (Phase 3 so far)
+### Known limitations (Phase 3)
 
 - **Offline needs one online visit.** The worker installs on the first
   visit; pages never opened are not kept (the offline page says so and
@@ -150,7 +173,22 @@ Everything is stored locally with `updatedAt` on every row, ready for sync.
   decision 18 for why).
 - **Hardcover matches are remembered per device.** A second device asks
   again about the books that were unsure the first time.
-- **A flaky page-turn test.** "A tap while the leaf is still turning"
-  fails about one run in six in WebKit at desktop sizes on a loaded test
-  machine (the second tap is lost). Reader code is unchanged in Phase 3;
-  to be looked at in the polish step.
+- **The reader's own pages fill in after their script.** The library,
+  notes and profile come from the device (IndexedDB), so on slow 4G their
+  main content appears at about 4–5 s, once the page's code has run. Doing
+  it sooner would mean rendering them on the server, from the account,
+  which is against the local-first design.
+- **The reader scores a layout shift as a book opens** (about 0.36 on
+  slow 4G). It happens inside foliate's closed shadow root, as the first
+  page is laid out beneath the opening cover, out of reach of our code.
+- **Performance was measured on an emulated phone,** on a shared machine
+  whose load varied (blocking-time figures especially); a real mid-range
+  Android phone should confirm the numbers. The reader's blocking time
+  now counts (about 1 s): it is measured from the first paint, which used
+  to come after the code had run and now comes before it.
+- **Playwright's WebKit sometimes stops drawing frames** on a loaded test
+  machine: for several seconds no animation frame arrives, the curl and
+  the opening cover stand still, and reader tests that wait for a page
+  turn time out. The build before this polish does the same (side by side:
+  3 of 28 WebKit reader tests failed there, 1 of 28 here), and failed tests
+  pass when run again. Chromium is not affected.

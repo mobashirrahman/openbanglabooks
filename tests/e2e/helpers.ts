@@ -1,3 +1,4 @@
+import AxeBuilder from "@axe-core/playwright";
 import { expect, type Page, type TestInfo } from "@playwright/test";
 import { mkdirSync } from "node:fs";
 
@@ -125,4 +126,11 @@ export async function clearLocalData(page: Page) {
       req.onsuccess = req.onerror = req.onblocked = () => resolve();
     });
   });
+}
+
+/** No serious or critical axe violations on the page as it is now. */
+export async function expectNoSeriousViolations(page: Page, label: string) {
+  const results = await new AxeBuilder({ page }).exclude("nextjs-portal").analyze();
+  const serious = results.violations.filter((v) => v.impact === "serious" || v.impact === "critical");
+  expect(serious.map((v) => `${label}: ${v.id} – ${v.nodes.length} nodes: ${v.nodes[0]?.target} ${v.nodes[0]?.failureSummary ?? ""}`)).toEqual([]);
 }

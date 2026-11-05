@@ -1,6 +1,6 @@
 import { expect, test, type Page } from "@playwright/test";
 import { signIn } from "./auth-helpers";
-import { clearLocalData, expectNoHorizontalOverflow, shot } from "./helpers";
+import { clearLocalData, expectNoHorizontalOverflow, expectNoSeriousViolations, shot } from "./helpers";
 
 /**
  * Hardcover and Readwise, against the stand-ins in mock-upstreams.ts (the
@@ -98,6 +98,7 @@ test.describe("connections", () => {
     await expect(connected).toBeVisible();
     const username = (await connected.textContent())!.match(/@(reader\d+)/)![1];
     await expectNoHorizontalOverflow(page);
+    await expectNoSeriousViolations(page, "profile, Hardcover connected");
     await shot(page, info, "connections-hardcover");
 
     // bringing books in: the same review as a Goodreads file
@@ -135,6 +136,7 @@ test.describe("connections", () => {
     await expect(page.getByText("আমার খাতা")).toHaveCount(0);
     await devdas.selectOption({ label: "Devdas — Sarat Chandra Chattopadhyay — 1917" });
     await expectNoHorizontalOverflow(page);
+    await expectNoSeriousViolations(page, "Hardcover send review");
     await shot(page, info, "hardcover-send-review", true);
 
     await page.getByRole("button", { name: "হার্ডকভারে পাঠান (৩)" }).click();
@@ -221,6 +223,7 @@ test.describe("connections", () => {
     expect(state.posts).toBe(2);
     expect(state.highlights).toHaveLength(2);
     await expectNoHorizontalOverflow(page);
+    await expectNoSeriousViolations(page, "profile, Readwise connected");
     await shot(page, info, "connections-readwise");
 
     await card.getByRole("button", { name: "সংযোগ ছিন্ন করুন" }).click();

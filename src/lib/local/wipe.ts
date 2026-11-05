@@ -4,6 +4,7 @@ import { localDB, markHasProgress } from "./db";
 import { markUntracked } from "./outbox";
 import { READER_SETTINGS_KEY } from "@/lib/reader/settings";
 import { forgetOfflinePages } from "@/lib/offline/pages";
+import { forgetBooksHere } from "@/lib/reader/early-book";
 
 /** Tables holding a reader's own data (what an account owns). */
 const PERSONAL = ["positions", "remotePositions", "library", "bookmarks", "annotations", "days", "remoteDays", "shelves", "shelfItems", "outbox", "personalBooks"] as const;
@@ -53,6 +54,7 @@ export async function wipeDevice() {
     await db.personalCovers.clear();
   });
   markHasProgress(false);
+  forgetBooksHere();
   await forgetOfflinePages().catch(() => {});
   try {
     localStorage.removeItem(READER_SETTINGS_KEY);

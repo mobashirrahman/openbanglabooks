@@ -112,6 +112,8 @@
   --accent: #d08c7b;
   --accent-text: #d08c7b;
   --accent-soft: rgb(208 140 123 / 0.22);
+  /* the light theme's red, lightened: 5.2:1 on every dark surface */
+  --destructive: #eb7e70;
   --link: var(--green-200);
   --focus: var(--brass-300);
   --desk: #161918;
@@ -134,6 +136,7 @@
     --line-strong: rgb(236 230 218 / 0.24);
     --cloth: var(--green-900);
     --accent-text: #d08c7b;
+    --destructive: #eb7e70;
     --link: var(--green-200);
     --focus: var(--brass-300);
     color-scheme: dark;
@@ -313,6 +316,32 @@
 .leaf-sweep-prev { animation: leaf-sweep-prev 420ms var(--ease-paper) both; }
 @media (prefers-reduced-motion: reduce) {
   .leaf-sweep { display: none; }
+}
+
+/*
+ * The closed book while a book loads, placed by CSS so it shows from the
+ * first paint, before any script has run. The same rules as
+ * OpeningCover's script (which takes over, in pixels): on phones (< 700 px)
+ * 62% of the height at most, 78% of the width; elsewhere the height of
+ * the page frame, on the right-hand page when two pages fit. Centred by
+ * layout, not by translate: the script then writes the same left/top in
+ * pixels, which the browser does not count as a layout shift.
+ */
+.opening-book {
+  --book-h: min(62dvh, 117vw);
+  aspect-ratio: 2 / 3;
+  height: var(--book-h);
+  left: calc(50% - var(--book-h) / 3);
+  top: calc(50% - var(--book-h) / 2);
+}
+@media (min-width: 700px) {
+  .opening-book { --book-h: max(320px, calc(100dvh - 80px)); }
+}
+@media (min-width: 700px) and (min-height: 761px) {
+  .opening-book { --book-h: max(320px, calc(100dvh - 128px)); }
+}
+@media (min-width: 1100px) and (min-aspect-ratio: 115 / 100) {
+  .opening-book { left: 50%; }
 }
 
 /* reader progress slider: our own track, a paper thumb ringed in accent */

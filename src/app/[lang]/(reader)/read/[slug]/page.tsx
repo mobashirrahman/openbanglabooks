@@ -1,7 +1,9 @@
 import type { Metadata } from "next";
 import { notFound } from "next/navigation";
+import { headers } from "next/headers";
 import { connection } from "next/server";
 import { Reader } from "@/components/reader/reader";
+import { earlyBookScript } from "@/lib/reader/early-book";
 import { getWork, listWorks } from "@/lib/catalog/queries";
 import { getDictionary, getLocale } from "@/lib/i18n";
 import { localizedPath } from "@/lib/i18n/config";
@@ -42,29 +44,37 @@ export default async function ReadPage({ params, searchParams }: PageProps<"/[la
   const at = typeof sp.at === "string" && /^[\w./#-]{1,200}$/.test(sp.at) ? sp.at : null;
   const cfi = typeof sp.cfi === "string" && sp.cfi.startsWith("epubcfi(") && sp.cfi.length < 500 ? sp.cfi : null;
   const author = work.authors[0]?.slug;
+  const fileUrl = `/api/books/${work.file.sha256}`;
+  const nonce = (await headers()).get("x-nonce") ?? undefined;
+
   const next = all
     .filter((w) => w.slug !== slug && w.authors.some((a) => a.slug === author))
     .slice(0, 3)
     .map((w) => ({ slug: w.slug, title_bn: w.title_bn, href: localizedPath(locale, `/books/${w.slug}`) }));
 
   return (
-    <Reader
-      work={{
-        slug: work.slug,
-        title_bn: work.title_bn,
-        subtitle_bn: work.subtitle_bn,
-        title_en: work.title_en,
-        cover_variant: work.cover_variant,
-        authors: work.authors.map((a) => ({ name_bn: a.name_bn })),
-      }}
-      fileSha={work.file.sha256}
-      fileUrl={`/api/books/${work.file.sha256}`}
-      bookHref={localizedPath(locale, `/books/${slug}`)}
-      locale={locale}
-      labels={readerLabels(dict, locale)}
-      initial={{ href: at, cfi }}
-      next={next}
-    />
+    <>
+      {/* the book starts downloading as the page arrives, not once the reader's code has
+          run (early-book.ts). A preload would do the same in Chromium; WebKit fetches twice */}
+      <script nonce={nonce} dangerouslySetInnerHTML={{ __html: earlyBookScript(fileUrl, work.file.sha256) }} />
+      <Reader
+        work={{
+          slug: work.slug,
+          title_bn: work.title_bn,
+          subtitle_bn: work.subtitle_bn,
+          title_en: work.title_en,
+          cover_variant: work.cover_variant,
+          authors: work.authors.map((a) => ({ name_bn: a.name_bn })),
+        }}
+        fileSha={work.file.sha256}
+        fileUrl={fileUrl}
+        bookHref={localizedPath(locale, `/books/${slug}`)}
+        locale={locale}
+        labels={readerLabels(dict, locale)}
+        initial={{ href: at, cfi }}
+        next={next}
+      />
+    </>
   );
 }
 

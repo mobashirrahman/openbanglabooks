@@ -11,6 +11,7 @@ import { readwiseLastSent, sendHighlights } from "@/lib/connections/client";
 import { formatNumber } from "@/lib/i18n/format";
 import { localeTag, localizedPath, type Locale } from "@/lib/i18n/config";
 import { t } from "@/lib/i18n/t";
+import { CONNECTIONS_PLACEHOLDER } from "./placeholder";
 import type { Dictionary } from "@/lib/i18n/dictionaries/bn";
 
 type Labels = Dictionary["connections"];
@@ -57,7 +58,7 @@ export function ConnectionsSection({ locale, labels }: { locale: Locale; labels:
     };
   }, [signedIn, version, labels]);
 
-  if (account.status === "loading") return <div className="min-h-24" aria-busy />;
+  if (account.status === "loading") return <div className={CONNECTIONS_PLACEHOLDER} aria-busy />;
   // the account section above has the sign-in button
   if (!signedIn)
     return (

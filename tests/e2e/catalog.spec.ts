@@ -1,4 +1,4 @@
-import { expect, test } from "@playwright/test";
+import { expect, test, type Request } from "@playwright/test";
 import AxeBuilder from "@axe-core/playwright";
 import { expectBengaliFonts, expectNoHorizontalOverflow, shot, viewportOf } from "./helpers";
 
@@ -38,6 +38,26 @@ test.describe("public catalog", () => {
     await expect(page.locator("html")).toHaveAttribute("lang", "en");
     await expect(page.getByRole("link", { name: "Start reading" })).toBeVisible();
     await expect(page.getByText("Calcutta at the end of the nineteenth century")).toBeVisible();
+  });
+
+  test("the page in the other language is not prefetched (it is a full page load)", async ({ page }) => {
+    for (const [path, other] of [
+      ["/en/library", "/library"],
+      ["/en/profile", "/profile"],
+      ["/library", "/en/library"],
+    ]) {
+      let prefetches = 0;
+      const count = (r: Request) => {
+        const url = new URL(r.url());
+        if (url.pathname === other && url.searchParams.has("_rsc")) prefetches++;
+      };
+      page.on("request", count);
+      await page.goto(path);
+      await page.waitForTimeout(2000);
+      page.off("request", count);
+      // from a desktop header Next once prefetched it hundreds of times a second
+      expect(prefetches, path).toBeLessThan(5);
+    }
   });
 
   test("/bn/… redirects to the canonical unprefixed URL", async ({ page }) => {

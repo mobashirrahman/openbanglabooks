@@ -2,6 +2,7 @@
 
 import { unzip } from "fflate";
 import { localDB } from "@/lib/local/db";
+import { markBookHere, takeEarlyBook } from "@/lib/reader/early-book";
 
 export class OfflineError extends Error {}
 export class BookFileError extends Error {}
@@ -14,13 +15,17 @@ export class BookFileError extends Error {}
 export async function loadEpubBytes(sha256: string, url: string | null): Promise<Uint8Array> {
   const db = localDB();
   const cached = await db.files.get(sha256).catch(() => undefined);
-  if (cached?.data) return new Uint8Array(cached.data);
-  if (cached?.blob) return new Uint8Array(await cached.blob.arrayBuffer());
+  if (cached?.data || cached?.blob) {
+    // keeps the page's hint fresh, and fills it in for books kept before there was one (early-book.ts)
+    if (url) markBookHere(sha256);
+    return cached.data ? new Uint8Array(cached.data) : new Uint8Array(await cached.blob!.arrayBuffer());
+  }
   // a reader's own book lives only in IndexedDB
   if (!url) throw new BookFileError("not on this device");
   let res: Response;
   try {
-    res = await fetch(url);
+    // the page may have started this download already; if that failed, try once more
+    res = (await takeEarlyBook(url)) ?? (await fetch(url));
   } catch {
     throw new OfflineError("network");
   }
@@ -37,6 +42,7 @@ export async function loadEpubBytes(sha256: string, url: string | null): Promise
   const data = bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength) as ArrayBuffer;
   db.files
     .put({ sha256, data, bytes: bytes.byteLength, cachedAt: Date.now() })
+    .then(() => markBookHere(sha256))
     .catch(() => {
       /* storage full or unavailable: reading still works, just not offline */
     });

@@ -5,7 +5,12 @@ import { localizedPath, type Locale } from "@/lib/i18n/config";
 import { useBarePathname } from "./use-locale-path";
 import { cn } from "@/lib/utils";
 
-/** Links to the same page in the other UI language. */
+/**
+ * Links to the same page in the other UI language. Not prefetched: the
+ * other language is another root layout, so following the link loads the
+ * whole page anyway, and Next's prefetch of it (from a desktop header,
+ * where the link is in view) repeated itself hundreds of times a second.
+ */
 export function LanguageSwitch({
   locale,
   label,
@@ -22,6 +27,7 @@ export function LanguageSwitch({
   return (
     <Link
       href={localizedPath(other, path)}
+      prefetch={false}
       hrefLang={other}
       lang={other}
       title={title}

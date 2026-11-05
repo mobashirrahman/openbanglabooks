@@ -1,6 +1,6 @@
 import { expect, test, type Page } from "@playwright/test";
 import { readFile } from "node:fs/promises";
-import { clearLocalData, expectNoHorizontalOverflow, shot } from "./helpers";
+import { clearLocalData, expectNoHorizontalOverflow, expectNoSeriousViolations, shot } from "./helpers";
 
 /**
  * Goodreads: the reader's export is read and matched in the browser, the
@@ -66,6 +66,7 @@ test.describe("Goodreads", () => {
     await expect(page.getByRole("button", { name: "‘আমার বই’-তে যোগ করুন (৩)" })).toBeEnabled();
     await gora.selectOption("gora");
     await expectNoHorizontalOverflow(page);
+    await expectNoSeriousViolations(page, "goodreads review");
     await shot(page, info, "goodreads-review", true);
 
     // a book not in the catalogue can still be pointed at one, from all books

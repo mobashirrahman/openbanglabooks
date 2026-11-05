@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useLayoutEffect, useRef, useState } from "react";
+import { useEffect, useLayoutEffect, useRef, useState, useSyncExternalStore } from "react";
 import { animate } from "motion/react";
 import { BookCover } from "@/components/cover/book-cover";
 import type { WorkSnapshot } from "@/lib/local/db";
@@ -8,6 +8,7 @@ import { columnsFor, frameSize } from "@/lib/reader/layout";
 import { readOpenOrigin } from "@/lib/reader/open-origin";
 
 const OPENED_KEY = "obb:opened";
+const noSubscribe = () => () => {};
 const EASE: [number, number, number, number] = [0.2, 0.7, 0.2, 1];
 
 /**
@@ -22,6 +23,13 @@ export function OpeningCover({ work, ready, reducedMotion }: { work: WorkSnapsho
   const [done, setDone] = useState(false);
   const [placed, setPlaced] = useState(false);
   const repeat = useRef(false);
+  // true while hydrating server HTML: the cover has been on screen (placed by CSS) since the first paint
+  const hydrating = useSyncExternalStore(
+    noSubscribe,
+    () => false,
+    () => true,
+  );
+  const fromServer = useRef(hydrating);
 
   // place the cover where the book will lie, then fly it in from the tapped cover
   useLayoutEffect(() => {
@@ -37,6 +45,7 @@ export function OpeningCover({ work, ready, reducedMotion }: { work: WorkSnapsho
     const coverW = coverH / 1.5;
     const left = cols === 2 ? w / 2 : (w - coverW) / 2;
     const top = (h - coverH) / 2;
+    const shown = book.getBoundingClientRect();
     Object.assign(book.style, { width: `${coverW}px`, height: `${coverH}px`, left: `${left}px`, top: `${top}px` });
 
     try {
@@ -47,6 +56,21 @@ export function OpeningCover({ work, ready, reducedMotion }: { work: WorkSnapsho
     const origin = readOpenOrigin(work.slug);
     if (reducedMotion || repeat.current) {
       setPlaced(true);
+      return;
+    }
+    if (fromServer.current) {
+      fromServer.current = false;
+      // already showing where CSS put it: settle into the exact place, without a second entrance
+      const dx = shown.left - left;
+      const dy = shown.top - top;
+      const s = shown.width / coverW;
+      if (Math.abs(dx) < 1 && Math.abs(dy) < 1 && Math.abs(s - 1) < 0.01) {
+        setPlaced(true);
+        return;
+      }
+      book.style.transformOrigin = "0 0";
+      book.style.transform = `translate(${dx}px, ${dy}px) scale(${s})`;
+      animate(book, { transform: "translate(0px, 0px) scale(1)" }, { duration: 0.24, ease: EASE }).then(() => setPlaced(true));
       return;
     }
     if (origin) {
@@ -90,7 +114,7 @@ export function OpeningCover({ work, ready, reducedMotion }: { work: WorkSnapsho
   if (done) return null;
   return (
     <div ref={rootRef} className="fixed inset-0 z-30 bg-[var(--desk)]" aria-hidden={ready}>
-      <div ref={bookRef} className="absolute" style={{ perspective: "1800px" }}>
+      <div ref={bookRef} className="opening-book absolute" style={{ perspective: "1800px" }}>
         {/* the first page, revealed as the cover swings open */}
         <div className="absolute inset-0 rounded-[2px] bg-[var(--paper)] shadow-[0_30px_60px_-30px_rgb(0_0_0/0.6)]" />
         <div

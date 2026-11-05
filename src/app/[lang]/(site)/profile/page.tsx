@@ -5,6 +5,7 @@ import { AccountPanel } from "@/components/account/account-panel";
 import { LanguageSwitch } from "@/components/nav/language-switch";
 import { AppSection } from "@/components/offline/app-section";
 import { ConnectionsSection } from "@/components/connections/connections-section";
+import { CONNECTIONS_PLACEHOLDER } from "@/components/connections/placeholder";
 import { getDictionary, getLocale } from "@/lib/i18n";
 
 export async function generateMetadata(): Promise<Metadata> {
@@ -26,7 +27,7 @@ export default async function ProfilePage() {
         <section id="connections" className="grid scroll-mt-20 gap-4 py-8 sm:grid-cols-[12rem_1fr]">
           <h2 className="text-xl">{dict.connections.title}</h2>
           {/* the reader's choices come back from Hardcover in the address (?hardcover=…) */}
-          <Suspense fallback={<div className="min-h-24" aria-busy />}>
+          <Suspense fallback={<div className={CONNECTIONS_PLACEHOLDER} aria-busy />}>
             <ConnectionsSection locale={locale} labels={dict.connections} />
           </Suspense>
         </section>
