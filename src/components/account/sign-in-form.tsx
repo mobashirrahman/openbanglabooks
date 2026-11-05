@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, useSyncExternalStore } from "react";
 import { useRouter } from "next/navigation";
 import { ArrowLeft, Check, Loader2, Mail } from "lucide-react";
 import { getSupabase, useAccount, accountsEnabled } from "@/lib/account/session";
@@ -13,6 +13,11 @@ type Labels = Dictionary["account"];
 type Step = { kind: "email" } | { kind: "code"; email: string } | { kind: "done" };
 
 const RESEND_SECONDS = 60;
+
+// false while server-rendered and hydrating: a tap on "send" before then
+// would submit the form natively (reloading the page with the address in the URL)
+const noop = () => () => {};
+const useHydrated = () => useSyncExternalStore(noop, () => true, () => false);
 const EMAIL = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
 /** Only same-site paths: `next` comes from the URL and must never send a reader elsewhere. */
@@ -40,6 +45,7 @@ export function SignInForm({ locale, labels }: { locale: Locale; labels: Labels 
   const [error, setError] = useState<string | null>(null);
   const [cooldown, setCooldown] = useState(0);
   const codeRef = useRef<HTMLInputElement>(null);
+  const hydrated = useHydrated();
   // where to go afterwards (?next=…). Read when needed, not while rendering:
   // on a client-side navigation the address bar updates after the first render.
   const target = () => safeNext(new URLSearchParams(window.location.search).get("next"), localizedPath(locale, "/library"));
@@ -64,7 +70,7 @@ export function SignInForm({ locale, labels }: { locale: Locale; labels: Labels 
   if (account.status === "signed-in" && step.kind !== "done") {
     return (
       <div className="space-y-5">
-        <p className="text-lg">{t(labels.signedInAs, { email: account.user.email ?? "" })}</p>
+        <p className="text-lg [overflow-wrap:anywhere]">{t(labels.signedInAs, { email: account.user.email ?? "" })}</p>
         <button
           type="button"
           onClick={() => router.push(target())}
@@ -131,7 +137,11 @@ export function SignInForm({ locale, labels }: { locale: Locale; labels: Labels 
         noValidate
         onSubmit={(e) => {
           e.preventDefault();
-          const address = email.trim();
+          // read from the field itself (uncontrolled), so an address typed
+          // while the page was still loading is kept
+          const field = e.currentTarget.elements.namedItem("email") as HTMLInputElement | null;
+          const address = (field?.value ?? "").trim();
+          setEmail(address);
           if (!EMAIL.test(address)) return setError(labels.invalidEmail);
           void send(address);
         }}
@@ -150,8 +160,8 @@ export function SignInForm({ locale, labels }: { locale: Locale; labels: Labels 
             autoCapitalize="none"
             spellCheck={false}
             required
-            value={email}
-            onChange={(e) => setEmail(e.target.value)}
+            defaultValue={email}
+            onChange={() => error && setError(null)}
             aria-invalid={Boolean(error)}
             aria-describedby="signin-help signin-error"
             className="h-12 w-full rounded-control border border-line-strong bg-surface px-4 text-base outline-none focus-visible:border-focus focus-visible:ring-2 focus-visible:ring-focus/30"
@@ -163,8 +173,9 @@ export function SignInForm({ locale, labels }: { locale: Locale; labels: Labels 
         <ErrorLine id="signin-error" text={error} />
         <button
           type="submit"
-          disabled={busy}
-          className="inline-flex h-12 w-full items-center justify-center gap-2 rounded-control bg-cloth px-6 text-on-cloth transition-colors hover:bg-cloth-raised disabled:opacity-70 sm:w-auto"
+          disabled={busy || !hydrated}
+          data-busy={busy || undefined}
+          className="inline-flex h-12 w-full items-center justify-center gap-2 rounded-control bg-cloth px-6 text-on-cloth transition-colors hover:bg-cloth-raised data-busy:opacity-70 sm:w-auto"
         >
           {busy ? <Loader2 aria-hidden className="size-5 animate-spin" /> : <Mail aria-hidden className="size-5" />}
           {busy ? labels.sending : labels.sendCode}
@@ -183,7 +194,7 @@ export function SignInForm({ locale, labels }: { locale: Locale; labels: Labels 
       }}
       className="space-y-5"
     >
-      <p className="text-lg" role="status">
+      <p className="text-lg [overflow-wrap:anywhere]" role="status">
         {t(labels.codeSent, { email: address })}
       </p>
       <div className="space-y-2">

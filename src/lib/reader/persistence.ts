@@ -28,10 +28,11 @@ export async function savePosition(work: WorkSnapshot, fileSha: string, update: 
     openedAt: existing?.openedAt ?? now,
     work: snapshotOf(work),
   });
-  // a book being read moves to "reading" in the local library
+  // a book being read moves to "reading" in the library, and to "finished" at the end
   const entry = await db.library.get(work.slug);
-  if (entry && entry.status === "want") await db.library.update(work.slug, { status: "reading", updatedAt: now });
-  if (update.finished && entry) await db.library.update(work.slug, { status: "finished", updatedAt: now });
+  if (entry && entry.status === "want") await db.library.update(work.slug, { status: "reading", startedAt: entry.startedAt ?? now, updatedAt: now });
+  if (update.finished && entry && entry.status !== "finished")
+    await db.library.update(work.slug, { status: "finished", startedAt: entry.startedAt ?? now, finishedAt: now, updatedAt: now });
   markHasProgress(true);
 }
 

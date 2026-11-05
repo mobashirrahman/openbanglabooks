@@ -5,6 +5,7 @@ import { SiteHeader } from "@/components/nav/site-header";
 import { SiteFooter } from "@/components/nav/site-footer";
 import { BottomNav } from "@/components/nav/primary-nav";
 import { OpenTracker } from "@/components/reader/open-tracker";
+import { SyncAgent } from "@/components/sync/sync-agent";
 import { getDictionary, getLocale } from "@/lib/i18n";
 import { locales } from "@/lib/i18n/config";
 import { siteUrl } from "@/lib/seo/site";
@@ -56,6 +57,7 @@ export default async function SiteLayout({ children }: LayoutProps<"/[lang]">) {
         </main>
         <SiteFooter locale={locale} dict={dict} />
         <OpenTracker />
+        <SyncAgent />
         <BottomNav
           locale={locale}
           labels={{ discover: dict.nav.discover, library: dict.nav.library, notes: dict.nav.notes, profile: dict.nav.profile, mainNav: dict.nav.mainNav }}

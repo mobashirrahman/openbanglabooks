@@ -8,7 +8,8 @@ import { ChevronRight } from "lucide-react";
 import { BookCover } from "@/components/cover/book-cover";
 import { Shelf } from "@/components/catalog/shelf";
 import { ReadButton } from "@/components/library/read-button";
-import { LibraryButton } from "@/components/library/library-button";
+import { LibraryControl } from "@/components/library/library-control";
+import { MyBookPage } from "@/components/library/my-book-page";
 import { JsonLd } from "@/components/seo/json-ld";
 import { getWork, listWorks } from "@/lib/catalog/queries";
 import type { TocEntry } from "@/lib/catalog/types";
@@ -89,6 +90,14 @@ async function BookContent({ params }: { params: Promise<{ slug: string }> }) {
       w.genres.some((g) => work.genres.some((wg) => wg.slug === g.slug)),
   );
   const flatToc = flattenToc(work.edition?.toc ?? []);
+  // what the reader's library keeps about a book (sent to client components, so kept small)
+  const snapshot = {
+    slug: work.slug,
+    title_bn: work.title_bn,
+    subtitle_bn: work.subtitle_bn ?? null,
+    cover_variant: work.cover_variant,
+    authors: work.authors.map((a) => ({ name_bn: a.name_bn })),
+  };
   const genre = work.genres[0];
   const period = work.literary_period ? PERIODS[work.literary_period]?.[locale] : null;
 
@@ -156,7 +165,15 @@ async function BookContent({ params }: { params: Promise<{ slug: string }> }) {
                     locale={locale}
                     labels={{ start: dict.actions.startReading, resume: dict.actions.continueReading, resumeAt: dict.reader.resumeAt }}
                   />
-                  <LibraryButton work={work} labels={{ add: dict.actions.addToLibrary, added: dict.actions.inLibrary }} />
+                  <LibraryControl
+                    work={snapshot}
+                    labels={{
+                      ...dict.library,
+                      add: dict.actions.addToLibrary,
+                      remove: dict.actions.removeFromLibrary,
+                      cancel: dict.account.cancel,
+                    }}
+                  />
                 </div>
               </div>
             </div>
@@ -165,6 +182,7 @@ async function BookContent({ params }: { params: Promise<{ slug: string }> }) {
 
         <div className="mx-auto grid max-w-6xl gap-12 px-4 py-12 sm:px-6 lg:grid-cols-[1fr_20rem] lg:gap-16 lg:px-8 lg:py-16">
           <div className="min-w-0 space-y-12">
+            <MyBookPage work={snapshot} locale={locale} labels={dict.library} />
             {description ? (
               <section aria-labelledby="about-heading">
                 <h2 id="about-heading" className="text-2xl">

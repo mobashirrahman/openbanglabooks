@@ -158,6 +158,16 @@ export async function updateAnnotation(id: string, patch: Partial<Pick<Annotatio
   await localDB().annotations.update(id, { ...patch, updatedAt: Date.now() });
 }
 
+/** A highlight found again in a newer file of its book. */
+export async function reanchorAnnotation(id: string, fileSha: string, cfi: string) {
+  await localDB().annotations.update(id, { fileSha, cfi, orphaned: false });
+}
+
+/** A highlight whose passage is not in the book's newer file: kept, listed, never drawn on a guess. */
+export async function orphanAnnotation(id: string) {
+  await localDB().annotations.update(id, { orphaned: true });
+}
+
 export async function deleteAnnotation(id: string) {
   await localDB().annotations.delete(id);
 }

@@ -22,9 +22,11 @@ export default async function LibraryPage() {
         locale={locale}
         labels={{
           ...dict.library,
-          want: locale === "bn" ? "পরে পড়ব" : "Want to read",
+          want: dict.library.statusWant,
           remove: dict.actions.removeFromLibrary,
           continueReading: dict.actions.continueReading,
+          signIn: dict.account.signIn,
+          cancel: dict.account.cancel,
         }}
       />
     </div>

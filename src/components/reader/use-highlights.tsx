@@ -10,7 +10,9 @@ import {
   createAnnotation,
   deleteAnnotation,
   lastHighlightColor,
+  orphanAnnotation,
   quoteOf,
+  reanchorAnnotation,
   rememberHighlightColor,
   updateAnnotation,
 } from "@/lib/reader/annotations";
@@ -62,6 +64,27 @@ export function useHighlights({
     listRef.current = annotations;
   });
 
+  // highlights made on an older file of this book: find them again in this one
+  // (by their quote and its context), or mark them orphaned. Once per file.
+  const reanchored = useRef(new Set<string>());
+  useEffect(() => {
+    const engine = engineRef.current;
+    if (!ready || !engine || !rows) return;
+    const stale = rows.filter((a) => a.fileSha !== fileSha && !a.orphaned && !reanchored.current.has(a.id));
+    if (!stale.length) return;
+    for (const a of stale) reanchored.current.add(a.id);
+    void engine
+      .locate(stale.map((a) => ({ id: a.id, quote: a.quote, prefix: a.prefix, suffix: a.suffix })))
+      .then(async (found) => {
+        for (const a of stale) {
+          const cfi = found.get(a.id);
+          if (cfi) await reanchorAnnotation(a.id, fileSha, cfi);
+          else await orphanAnnotation(a.id);
+        }
+      })
+      .catch(() => {});
+  }, [rows, fileSha, ready, engineRef]);
+
   // draw what is stored (only marks made on this exact file: CFIs are file-specific)
   useEffect(() => {
     const engine = engineRef.current;
@@ -71,7 +94,10 @@ export function useHighlights({
     );
   }, [annotations, ready, engineRef]);
 
-  const say = useCallback((text: string, action?: ToastMessage["action"]) => setToast({ id: toastId(), text, action }), []);
+  const say = useCallback(
+    (text: string, action?: ToastMessage["action"], duration?: number) => setToast({ id: toastId(), text, action, duration }),
+    [],
+  );
 
   /** Called (debounced) when the selection inside the book changes. */
   const checkSelection = useCallback(() => {

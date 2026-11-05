@@ -15,11 +15,15 @@ type Labels = Pick<
   "goalTitle" | "goalOf" | "goalMet" | "streak" | "streakHint" | "dailyGoal" | "minutes" | "lastSevenDays"
 >;
 
-/** Today's reading against the daily goal, the streak, and the last seven days. All on this device. */
+/** Today's reading against the daily goal, the streak, and the last seven days, across the reader's devices. */
 export function ReadingGoal({ locale, labels }: { locale: Locale; labels: Labels }) {
   const data = useLiveQuery(async () => {
-    const [days, goal] = await Promise.all([localDB().days.toArray(), getGoalMinutes()]);
-    return { days: new Map(days.map((d) => [d.day, d.seconds])), goal };
+    const db = localDB();
+    const [days, remote, goal] = await Promise.all([db.days.toArray(), db.remoteDays.toArray(), getGoalMinutes()]);
+    // a day's reading is the sum over the reader's devices
+    const total = new Map<string, number>();
+    for (const d of [...days, ...remote]) total.set(d.day, (total.get(d.day) ?? 0) + d.seconds);
+    return { days: total, goal };
   }, []);
   if (!data) return <div className="h-44" aria-busy />;
 

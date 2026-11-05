@@ -6,6 +6,7 @@
  */
 import { drawMark, drawSearchMark, snapToGraphemes, type MarkStyle } from "./annotations";
 import { findInDocument, normalizeQuery } from "./book-search";
+import { pickAnchor } from "./reanchor";
 import { makeLoader } from "./epub-loader";
 import { sanitizeSection } from "./styles";
 
@@ -150,6 +151,12 @@ export type Engine = {
    */
   search(query: string): AsyncGenerator<SearchEvent>;
   clearSearch(): void;
+  /**
+   * Finds saved passages in this file (highlights made on an older file of
+   * the book): a range CFI per passage, or null when it cannot be placed
+   * with confidence. Nothing is drawn.
+   */
+  locate(passages: { id: string; quote: string; prefix: string; suffix: string }[]): Promise<Map<string, string | null>>;
   /** True when a point (in a section document's coordinates) lands on a highlight. */
   hitsMark(doc: Document, x: number, y: number): boolean;
   /** Takes over touches on the book (page-curl drags), or gives them back to foliate (null). */
@@ -503,6 +510,33 @@ export async function createEngine(
       yield { kind: "done" };
     },
     clearSearch: () => clearSearchMarks(),
+    locate: async (passages) => {
+      const found = new Map<string, { cfi: string; pre: string; post: string }[]>(passages.map((p) => [p.id, []]));
+      const needles = passages.map((p) => ({ id: p.id, needle: normalizeQuery(p.quote) })).filter((p) => p.needle);
+      const { sections } = book;
+      for (let index = 0; index < sections.length && needles.length; index++) {
+        const section = sections[index];
+        if (!section.createDocument || section.linear === "no") continue;
+        let doc: Document | null = null;
+        try {
+          doc = await section.createDocument();
+        } catch {
+          doc = null;
+        }
+        if (!doc) continue;
+        for (const { id, needle } of needles) {
+          // more than a few occurrences cannot be told apart reliably anyway
+          for (const f of findInDocument(doc, needle, 6)) found.get(id)!.push({ cfi: view.getCFI(index, f.range), pre: f.excerpt.pre, post: f.excerpt.post });
+        }
+      }
+      const out = new Map<string, string | null>();
+      for (const p of passages) {
+        const candidates = found.get(p.id) ?? [];
+        const i = pickAnchor(candidates, p.prefix, p.suffix);
+        out.set(p.id, i >= 0 ? candidates[i].cfi : null);
+      }
+      return out;
+    },
     setTouchHandler: (h) => {
       touchHandler = h;
     },

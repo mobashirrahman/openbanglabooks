@@ -3,16 +3,19 @@
 import { useState } from "react";
 import Link from "next/link";
 import { LogIn, LogOut, UserRound } from "lucide-react";
-import { accountsEnabled, getSupabase, signOut, useAccount } from "@/lib/account/session";
+import { accountsEnabled, getSupabase, useAccount } from "@/lib/account/session";
+import { SyncStatusLine } from "@/components/sync/sync-indicator";
 import { localizedPath, type Locale } from "@/lib/i18n/config";
 import { t } from "@/lib/i18n/t";
+import { formatNumber } from "@/lib/i18n/format";
 import type { Dictionary } from "@/lib/i18n/dictionaries/bn";
 import { errorMessage } from "./sign-in-form";
 
 type Labels = Dictionary["account"];
+type SyncLabels = Dictionary["sync"];
 
 /** The account block on the profile page: sign in, or who is signed in, sign out and delete. */
-export function AccountPanel({ locale, labels, children }: { locale: Locale; labels: Labels; children?: React.ReactNode }) {
+export function AccountPanel({ locale, labels, syncLabels }: { locale: Locale; labels: Labels; syncLabels: SyncLabels }) {
   const account = useAccount();
   const [confirming, setConfirming] = useState(false);
   const [busy, setBusy] = useState(false);
@@ -49,8 +52,8 @@ export function AccountPanel({ locale, labels, children }: { locale: Locale; lab
       const sb = await getSupabase();
       const { error } = await sb.rpc("delete_my_account");
       if (error) throw error;
-      window.dispatchEvent(new CustomEvent("obb:account-deleted"));
-      await signOut();
+      const engine = await import("@/lib/sync/engine");
+      await engine.forgetAccount();
       setConfirming(false);
       setMessage(labels.deleted);
     } catch (e) {
@@ -66,9 +69,9 @@ export function AccountPanel({ locale, labels, children }: { locale: Locale; lab
         <span className="inline-flex size-10 shrink-0 items-center justify-center rounded-full bg-cloth text-on-cloth">
           <UserRound aria-hidden className="size-5" />
         </span>
-        <span className="min-w-0 break-words">{t(labels.signedInAs, { email: account.user.email ?? "" })}</span>
+        <span className="min-w-0 [overflow-wrap:anywhere]">{t(labels.signedInAs, { email: account.user.email ?? "" })}</span>
       </p>
-      {children}
+      <SyncStatusLine locale={locale} labels={syncLabels} />
       <div className="space-y-2">
         <button
           type="button"
@@ -76,7 +79,12 @@ export function AccountPanel({ locale, labels, children }: { locale: Locale; lab
           onClick={async () => {
             setBusy(true);
             try {
-              await signOut();
+              // last changes first; the account's data then leaves this device
+              const engine = await import("@/lib/sync/engine");
+              await engine.syncNow().catch(() => {});
+              const pending = await engine.pendingChanges();
+              if (pending && !window.confirm(t(labels.unsyncedConfirm, { count: formatNumber(pending, locale) }))) return;
+              await engine.signOutAndClear();
             } finally {
               setBusy(false);
             }

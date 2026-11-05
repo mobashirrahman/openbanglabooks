@@ -18,7 +18,7 @@ export default async function ProfilePage() {
       <div className="mt-10 divide-y divide-line border-y border-line">
         <section className="grid gap-4 py-8 sm:grid-cols-[12rem_1fr]">
           <h2 className="text-xl">{dict.account.title}</h2>
-          <AccountPanel locale={locale} labels={dict.account} />
+          <AccountPanel locale={locale} labels={dict.account} syncLabels={dict.sync} />
         </section>
         <section className="grid gap-4 py-8 sm:grid-cols-[12rem_1fr]">
           <h2 className="text-xl">{dict.profile.theme}</h2>

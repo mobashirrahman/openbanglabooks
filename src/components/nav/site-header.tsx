@@ -5,6 +5,7 @@ import { localizedPath, type Locale } from "@/lib/i18n/config";
 import { HeaderNav } from "./primary-nav";
 import { SearchDialog } from "@/components/search/search-dialog";
 import { LanguageSwitch } from "./language-switch";
+import { SyncIndicator } from "@/components/sync/sync-indicator";
 
 /**
  * The cloth band: Deep Forest Green carries the identity across the top of
@@ -13,13 +14,13 @@ import { LanguageSwitch } from "./language-switch";
 export function SiteHeader({ locale, dict }: { locale: Locale; dict: Dictionary }) {
   return (
     <header className="pt-safe relative z-30 bg-cloth text-on-cloth">
-      <div className="mx-auto flex h-14 max-w-7xl items-center gap-4 px-4 sm:px-6 lg:h-16 lg:px-8">
+      <div className="mx-auto flex h-14 max-w-7xl items-center gap-2 px-4 sm:gap-4 sm:px-6 lg:h-16 lg:px-8">
         <Link
           href={localizedPath(locale, "/")}
-          className="-ml-1 flex shrink-0 items-center rounded-control p-1 text-on-cloth focus-visible:outline-on-cloth"
+          className="-ml-1 flex min-w-0 items-center rounded-control p-1 text-on-cloth focus-visible:outline-on-cloth"
           aria-label={`${dict.meta.siteName} — ${dict.nav.home}`}
         >
-          <Logo variant="compact" className="h-7 w-auto lg:hidden" markClassName="text-foil" />
+          <Logo variant="compact" className="h-7 w-auto max-w-full min-w-0 lg:hidden" markClassName="text-foil" />
           <Logo variant="full" className="hidden h-10 w-auto lg:block" markClassName="text-foil" />
         </Link>
         <div className="ml-4 hidden lg:block">
@@ -43,6 +44,7 @@ export function SiteHeader({ locale, dict }: { locale: Locale; dict: Dictionary 
               seeAll: dict.actions.seeAll,
             }}
           />
+          <SyncIndicator locale={locale} labels={dict.sync} />
           <LanguageSwitch locale={locale} label={dict.nav.language} title={dict.nav.languageSwitch} />
         </div>
       </div>

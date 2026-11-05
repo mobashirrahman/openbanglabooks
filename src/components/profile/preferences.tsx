@@ -3,8 +3,11 @@
 import { useEffect, useState, useSyncExternalStore } from "react";
 import { Monitor, Moon, Sun } from "lucide-react";
 import { THEME_STORAGE_KEY } from "@/components/theme/theme-script";
-import { localDB, markHasProgress } from "@/lib/local/db";
-import { READER_SETTINGS_KEY } from "@/lib/reader/settings";
+import { localDB } from "@/lib/local/db";
+import { wipeDevice } from "@/lib/local/wipe";
+import { accountState } from "@/lib/account/session";
+import { requestSyncNow } from "@/lib/sync/status";
+import { DEFAULT_SETTINGS, READER_SETTINGS_KEY } from "@/lib/reader/settings";
 import { cn } from "@/lib/utils";
 import type { Dictionary } from "@/lib/i18n/dictionaries/bn";
 
@@ -81,21 +84,20 @@ export function DeviceData({ labels }: { labels: Dictionary["profile"] }) {
   }, [message]);
 
   const resetReading = async () => {
-    await localDB().settings.delete(READER_SETTINGS_KEY);
+    // written, not deleted: the reset reaches the reader's other devices too
+    await localDB().settings.put({ key: READER_SETTINGS_KEY, value: DEFAULT_SETTINGS, updatedAt: Date.now() });
     try {
-      localStorage.removeItem(READER_SETTINGS_KEY);
+      localStorage.setItem(READER_SETTINGS_KEY, JSON.stringify(DEFAULT_SETTINGS));
     } catch {}
     setMessage(labels.resetDone);
   };
 
   const clearAll = async () => {
-    if (!window.confirm(labels.clearConfirm)) return;
-    const db = localDB();
-    await Promise.all([db.positions.clear(), db.library.clear(), db.bookmarks.clear(), db.files.clear(), db.settings.clear(), db.annotations.clear(), db.days.clear()]);
-    try {
-      localStorage.removeItem(READER_SETTINGS_KEY);
-    } catch {}
-    markHasProgress(false);
+    const signedIn = accountState().status === "signed-in";
+    if (!window.confirm(signedIn ? labels.clearConfirmSignedIn : labels.clearConfirm)) return;
+    // local only: the account (if any) keeps its data and sends it back
+    await wipeDevice();
+    if (signedIn) requestSyncNow();
     setMessage(labels.cleared);
   };
 

@@ -3,7 +3,7 @@
 import { useEffect, useLayoutEffect, useRef } from "react";
 import { cn } from "@/lib/utils";
 
-export type ToastMessage = { id: number; text: string; action?: { label: string; onClick: () => void } };
+export type ToastMessage = { id: number; text: string; action?: { label: string; onClick: () => void }; duration?: number };
 
 let seq = 0;
 /** A fresh id, so the same message shown twice still re-announces. */
@@ -18,7 +18,7 @@ export function Toast({ toast, onDone, className }: { toast: ToastMessage | null
   });
   useEffect(() => {
     if (!toast) return;
-    const t = setTimeout(() => done.current(), toast.action ? 6000 : 2200);
+    const t = setTimeout(() => done.current(), toast.duration ?? (toast.action ? 6000 : 2200));
     return () => clearTimeout(t);
   }, [toast]);
   return (

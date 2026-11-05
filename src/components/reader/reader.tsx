@@ -24,7 +24,7 @@ import { OpeningCover } from "./opening-cover";
 import { useHighlights } from "./use-highlights";
 import { useReadingTime } from "./use-reading-time";
 import { t } from "@/lib/i18n/t";
-import { formatNumber } from "@/lib/i18n/format";
+import { formatNumber, formatPercent } from "@/lib/i18n/format";
 import { applyHighlightTheme } from "@/lib/reader/annotations";
 
 export type ReaderProps = {
@@ -90,6 +90,8 @@ export function Reader(props: ReaderProps) {
   const restoring = useRef<string | null>(null);
   const restoreToken = useRef(0);
   const phaseRef = useRef<Phase>("loading");
+  /** when this device last moved in the book (another device's newer place is offered) */
+  const movedAt = useRef(0);
   const lastCss = useRef("");
   const settingsRef = useRef(settings);
   settingsRef.current = settings;
@@ -347,6 +349,7 @@ export function Reader(props: ReaderProps) {
         const [bytes, saved] = await Promise.all([loadEpubBytes(fileSha, fileUrl), getPosition(work.slug, fileSha)]);
         if (cancelled || !hostRef.current) return;
         const cfi = props.initial.cfi ?? (props.initial.href ? null : saved?.cfi) ?? null;
+        movedAt.current = (await localDB().positions.get(work.slug))?.updatedAt ?? 0;
         engine = await createEngine(
           hostRef.current,
           bytes,
@@ -354,6 +357,7 @@ export function Reader(props: ReaderProps) {
           {
             onRelocate: (r) => {
               locationRef.current = r;
+              if (phaseRef.current === "ready") movedAt.current = Date.now();
               setLocation(r);
               if (saveTimer.current) clearTimeout(saveTimer.current);
               saveTimer.current = setTimeout(() => flush(), 500);
@@ -691,6 +695,26 @@ export function Reader(props: ReaderProps) {
     setEnded(false);
     await engineRef.current?.goToFraction(f);
   }, []);
+
+  // ── another device's place ────────────────────────────────────────────────
+  // Read further on the phone, then opened the laptop? Offer that place,
+  // without moving the book on its own. Offered once per remote position.
+  const remotePlaces = useLiveQuery(() => localDB().remotePositions.where("workSlug").equals(work.slug).toArray(), [work.slug]);
+  const offered = useRef(new Set<string>());
+  useEffect(() => {
+    if (phase !== "ready" || !remotePlaces?.length) return;
+    const here = locationRef.current;
+    const newest = remotePlaces.filter((p) => p.updatedAt > movedAt.current).sort((a, b) => b.updatedAt - a.updatedAt)[0];
+    if (!here || !newest) return;
+    const key = `${newest.id}@${newest.updatedAt}`;
+    if (offered.current.has(key) || Math.abs(newest.fraction - here.fraction) < 0.01) return;
+    offered.current.add(key);
+    hlRef.current.say(
+      t(labels.otherDevice, { device: newest.deviceLabel ?? "—", percent: formatPercent(newest.fraction, locale) }),
+      { label: labels.goThere, onClick: () => void (newest.fileSha === fileSha ? goTo(newest.cfi) : goToFraction(newest.fraction)) },
+      12000,
+    );
+  }, [phase, remotePlaces, fileSha, goTo, goToFraction, labels, locale]);
 
   const frame = frameSize(stage.width, stage.height, columns, mobile);
 

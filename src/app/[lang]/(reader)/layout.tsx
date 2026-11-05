@@ -5,6 +5,7 @@ import { getLocale } from "@/lib/i18n";
 import { locales } from "@/lib/i18n/config";
 import { siteUrl } from "@/lib/seo/site";
 import { READER_SETTINGS_KEY, THEMES } from "@/lib/reader/settings";
+import { SyncAgent } from "@/components/sync/sync-agent";
 
 /**
  * Root layout for the immersive reader. Separate from the site layout so that
@@ -42,7 +43,10 @@ export default async function ReaderLayout({ children }: LayoutProps<"/[lang]">)
       <head>
         <script nonce={nonce} dangerouslySetInnerHTML={{ __html: readerThemeScript }} />
       </head>
-      <body className="overflow-hidden overscroll-none bg-transparent">{children}</body>
+      <body className="overflow-hidden overscroll-none bg-transparent">
+        {children}
+        <SyncAgent />
+      </body>
     </html>
   );
 }

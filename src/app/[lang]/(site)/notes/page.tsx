@@ -20,6 +20,7 @@ export default async function NotesPage() {
         locale={locale}
         labels={{
           ...dict.notes,
+          signIn: dict.account.signIn,
           findBook: locale === "bn" ? "বই খুঁজুন" : "Find a book",
           reader: {
             colors: r.colors,

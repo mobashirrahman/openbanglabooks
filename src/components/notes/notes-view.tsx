@@ -3,7 +3,7 @@
 import { useDeferredValue, useMemo, useState } from "react";
 import Link from "next/link";
 import { useLiveQuery } from "dexie-react-hooks";
-import { Download, NotebookPen, Search, Trash2 } from "lucide-react";
+import { Copy, Download, NotebookPen, Search, Trash2, Unlink } from "lucide-react";
 import { BookCover } from "@/components/cover/book-cover";
 import { NoteEditor } from "@/components/reader/note-editor";
 import { Toast, toastId, type ToastMessage } from "@/components/ui/toast";
@@ -23,9 +23,11 @@ import { formatNumber, formatPercent } from "@/lib/i18n/format";
 import { localizedPath, type Locale } from "@/lib/i18n/config";
 import { t } from "@/lib/i18n/t";
 import type { Dictionary } from "@/lib/i18n/dictionaries/bn";
+import { WhereDataLives } from "@/components/sync/where-data-lives";
 import { cn } from "@/lib/utils";
 
 type Labels = Dictionary["notes"] & {
+  signIn: string;
   reader: Pick<
     Dictionary["reader"],
     "colors" | "note" | "notePlaceholder" | "save" | "cancel" | "deleteNote" | "closeMenu" | "addNote" | "editNote" | "deleteHighlight" | "chapterOf"
@@ -213,18 +215,36 @@ export function NotesView({ locale, labels }: { locale: Locale; labels: Labels }
                         style={{ background: a.style === "underline" ? "var(--color-accent)" : SWATCH[a.color] }}
                       />
                       <div className="min-w-0 flex-1">
+                        {a.orphaned || a.conflictOf ? (
+                          <p className="mb-2 flex flex-wrap gap-2 text-xs">
+                            {a.orphaned ? (
+                              <span className="inline-flex items-center gap-1.5 rounded-full bg-sunken px-2.5 py-1 text-fg-muted">
+                                <Unlink aria-hidden className="size-3.5" />
+                                {labels.orphaned}
+                              </span>
+                            ) : null}
+                            {a.conflictOf ? (
+                              <span className="inline-flex items-center gap-1.5 rounded-full bg-sunken px-2.5 py-1 text-fg-muted">
+                                <Copy aria-hidden className="size-3.5" />
+                                {labels.conflictCopy}
+                              </span>
+                            ) : null}
+                          </p>
+                        ) : null}
                         <blockquote className="font-read text-[1.05rem] leading-relaxed">{a.quote}</blockquote>
                         {a.note ? <p className="mt-3 rounded-[10px] bg-sunken px-3.5 py-2.5 text-[0.95rem] whitespace-pre-line">{a.note}</p> : null}
                         <div className="mt-3 flex flex-wrap items-center gap-x-4 gap-y-1 text-sm text-fg-muted">
                           <span>
                             {chapterLabel(a.chapter, labels.reader.chapterOf) ?? ""} {formatPercent(a.fraction, locale)}
                           </span>
-                          <a
-                            href={`${localizedPath(locale, `/read/${a.workSlug}`)}?cfi=${encodeURIComponent(a.cfi)}`}
-                            className="text-fg underline decoration-accent underline-offset-4"
-                          >
-                            {labels.openInReader}
-                          </a>
+                          {a.orphaned ? null : (
+                            <a
+                              href={`${localizedPath(locale, `/read/${a.workSlug}`)}?cfi=${encodeURIComponent(a.cfi)}`}
+                              className="text-fg underline decoration-accent underline-offset-4"
+                            >
+                              {labels.openInReader}
+                            </a>
+                          )}
                           <button type="button" onClick={() => setEditing(a.id)} className="inline-flex items-center gap-1.5 hover:text-fg">
                             <NotebookPen aria-hidden className="size-4" />
                             {a.note ? labels.reader.editNote : labels.reader.addNote}
@@ -246,7 +266,9 @@ export function NotesView({ locale, labels }: { locale: Locale; labels: Labels }
         <p className="mt-10 text-fg-muted">{labels.noMatches}</p>
       )}
 
-      <p className="mt-12 text-sm text-fg-subtle">{labels.localOnly}</p>
+      <div className="mt-12">
+        <WhereDataLives locale={locale} local={labels.localOnly} synced={labels.syncedNote} signIn={labels.signIn} next="/notes" />
+      </div>
 
       <NoteEditor
         annotation={editingRow}

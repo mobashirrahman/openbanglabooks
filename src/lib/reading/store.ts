@@ -15,15 +15,17 @@ async function setSetting(key: string, value: unknown) {
   await localDB().settings.put({ key, value, updatedAt: Date.now() });
 }
 
-/** Adds active reading time to today; returns today's total in seconds. */
+/** Adds active reading time to today on this device; returns today's total over all devices, in seconds. */
 export async function addReadingTime(seconds: number): Promise<number> {
   const db = localDB();
   const day = dayKey();
-  return db.transaction("rw", db.days, async () => {
+  const mine = await db.transaction("rw", db.days, async () => {
     const total = ((await db.days.get(day))?.seconds ?? 0) + seconds;
     await db.days.put({ day, seconds: total, updatedAt: Date.now() });
     return total;
   });
+  const others = await db.remoteDays.where("day").equals(day).toArray().catch(() => []);
+  return mine + others.reduce((sum, d) => sum + d.seconds, 0);
 }
 
 export const getGoalMinutes = () => getSetting(GOAL_KEY, DEFAULT_GOAL_MINUTES);
