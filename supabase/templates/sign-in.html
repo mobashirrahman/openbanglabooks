@@ -1,0 +1,37 @@
+<!doctype html>
+<html lang="bn">
+  <body style="margin:0;padding:0;background:#f4efe4;font-family:'Hind Siliguri','Noto Sans Bengali','Segoe UI',Arial,sans-serif;color:#282720">
+    <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background:#f4efe4;padding:32px 12px">
+      <tr>
+        <td align="center">
+          <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="max-width:480px;background:#fbf8f2;border-radius:14px;overflow:hidden;border:1px solid #e3dccd">
+            <tr>
+              <td style="background:#233b30;padding:20px 28px;color:#efe7d3;font-size:18px;letter-spacing:.2px">
+                <span style="color:#c9a961">&#9679;&#9679;</span>&nbsp; OpenBanglaBooks &middot; ওপেন বাংলা বুকস
+              </td>
+            </tr>
+            <tr>
+              <td style="padding:28px">
+                <p style="margin:0 0 6px;font-size:17px;line-height:1.7">সাইন ইন করার কোড</p>
+                <p style="margin:0 0 20px;font-size:36px;line-height:1.3;letter-spacing:8px;font-weight:600;font-family:'SFMono-Regular',Menlo,Consolas,monospace">{{ .Token }}</p>
+                <p style="margin:0 0 22px;font-size:16px;line-height:1.8;color:#4a473d">
+                  যে পাতায় ইমেইল দিয়েছিলেন, সেখানে এই কোডটি লিখুন। অথবা এই ডিভাইসেই নিচের বোতামে চাপ দিন।
+                </p>
+                <p style="margin:0 0 26px">
+                  <a href="{{ .RedirectTo }}&token_hash={{ .TokenHash }}&type=email" style="display:inline-block;background:#233b30;color:#fbf8f2;text-decoration:none;padding:12px 22px;border-radius:10px;font-size:16px">সাইন ইন করুন</a>
+                </p>
+                <p style="margin:0 0 4px;font-size:14px;line-height:1.7;color:#6b6759">
+                  Your sign-in code is <strong>{{ .Token }}</strong>. Enter it where you typed your email, or use the button above on this device.
+                </p>
+                <p style="margin:18px 0 0;font-size:13px;line-height:1.7;color:#8a8577">
+                  কোডটি এক ঘণ্টা কাজ করবে। আপনি না চাইলে এই ইমেইলটি উপেক্ষা করুন — কেউ আপনার অ্যাকাউন্টে ঢুকতে পারবে না।<br />
+                  The code works for one hour. If you didn't ask for it, you can ignore this email.
+                </p>
+              </td>
+            </tr>
+          </table>
+        </td>
+      </tr>
+    </table>
+  </body>
+</html>

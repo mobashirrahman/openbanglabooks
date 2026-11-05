@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import { DeviceData, ThemePreference } from "@/components/profile/preferences";
+import { AccountPanel } from "@/components/account/account-panel";
 import { LanguageSwitch } from "@/components/nav/language-switch";
 import { getDictionary, getLocale } from "@/lib/i18n";
 
@@ -15,6 +16,10 @@ export default async function ProfilePage() {
     <div className="mx-auto max-w-3xl px-4 pt-10 sm:px-6 sm:pt-14">
       <h1 className="text-4xl sm:text-5xl">{dict.profile.title}</h1>
       <div className="mt-10 divide-y divide-line border-y border-line">
+        <section className="grid gap-4 py-8 sm:grid-cols-[12rem_1fr]">
+          <h2 className="text-xl">{dict.account.title}</h2>
+          <AccountPanel locale={locale} labels={dict.account} />
+        </section>
         <section className="grid gap-4 py-8 sm:grid-cols-[12rem_1fr]">
           <h2 className="text-xl">{dict.profile.theme}</h2>
           <ThemePreference labels={dict.profile} />
