@@ -28,6 +28,7 @@ export default async function LibraryPage() {
           signIn: dict.account.signIn,
           cancel: dict.account.cancel,
         }}
+        personal={dict.personal}
       />
     </div>
   );

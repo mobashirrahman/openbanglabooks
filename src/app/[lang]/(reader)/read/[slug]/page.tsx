@@ -6,10 +6,15 @@ import { getWork, listWorks } from "@/lib/catalog/queries";
 import { getDictionary, getLocale } from "@/lib/i18n";
 import { localizedPath } from "@/lib/i18n/config";
 import { absoluteUrl } from "@/lib/seo/site";
+import { isPersonal, PERSONAL_ID } from "@/lib/personal/ids";
+import { PersonalReader } from "@/components/personal/personal-reader";
+import type { Dictionary } from "@/lib/i18n/dictionaries/bn";
+import type { Locale } from "@/lib/i18n/config";
 
 export async function generateMetadata({ params }: PageProps<"/[lang]/read/[slug]">): Promise<Metadata> {
   const { slug } = await params;
   const locale = await getLocale();
+  if (isPersonal(slug)) return { title: `${(await getDictionary(locale)).personal.metaTitle} | OpenBanglaBooks`, robots: { index: false, follow: false } };
   const work = await getWork(slug);
   if (!work) return {};
   return {
@@ -27,6 +32,10 @@ export const instant = false;
 export default async function ReadPage({ params, searchParams }: PageProps<"/[lang]/read/[slug]">) {
   await connection();
   const [{ slug }, sp, locale] = await Promise.all([params, searchParams, getLocale()]);
+  if (isPersonal(slug)) {
+    if (!PERSONAL_ID.test(slug)) notFound();
+    return <OwnBook id={slug} locale={locale} dict={await getDictionary(locale)} />;
+  }
   const [dict, work, all] = await Promise.all([getDictionary(locale), getWork(slug), listWorks()]);
   if (!work || !work.file) notFound();
 
@@ -52,17 +61,38 @@ export default async function ReadPage({ params, searchParams }: PageProps<"/[la
       fileUrl={`/api/books/${work.file.sha256}`}
       bookHref={localizedPath(locale, `/books/${slug}`)}
       locale={locale}
-      labels={{
-        ...dict.reader,
-        back: dict.actions.back,
-        retry: dict.actions.retry,
-        undo: dict.notes.undo,
-        deleted: dict.notes.deleted,
-        allNotes: dict.notes.title,
-        notesHref: localizedPath(locale, "/notes"),
-      }}
+      labels={readerLabels(dict, locale)}
       initial={{ href: at, cfi }}
       next={next}
+    />
+  );
+}
+
+function readerLabels(dict: Dictionary, locale: Locale) {
+  return {
+    ...dict.reader,
+    back: dict.actions.back,
+    retry: dict.actions.retry,
+    undo: dict.notes.undo,
+    deleted: dict.notes.deleted,
+    allNotes: dict.notes.title,
+    notesHref: localizedPath(locale, "/notes"),
+  };
+}
+
+/** A reader's own book: everything about it is on the device, so the page only sets the stage. */
+function OwnBook({ id, locale, dict }: { id: string; locale: Locale; dict: Dictionary }) {
+  const library = localizedPath(locale, "/library");
+  return (
+    <PersonalReader
+      id={id}
+      locale={locale}
+      bookHref={library}
+      libraryHref={library}
+      signInHref={`${localizedPath(locale, "/signin")}?next=${encodeURIComponent(localizedPath(locale, `/read/${id}`))}`}
+      personal={dict.personal}
+      labels={{ ...readerLabels(dict, locale), exit: dict.personal.backToLibrary }}
+      initial={{}}
     />
   );
 }

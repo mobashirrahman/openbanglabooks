@@ -112,6 +112,30 @@ export type ReadingDay = { day: string; seconds: number; updatedAt: number; serv
 /** Another device's reading time on a day; a day's total is the sum over devices. */
 export type RemoteDay = { id: string; deviceId: string; day: string; seconds: number };
 
+/**
+ * A book the reader added from their own EPUB file (cleaned in the browser).
+ * Its file is in `files` and its cover image, if it has one, in
+ * `personalCovers`. Stays on this device unless `cloud`: then the file is in
+ * the reader's private storage and this record and the book's reading data
+ * sync like everything else.
+ */
+export type PersonalBook = {
+  /** "mine-" + the first 24 hex digits of the file's SHA-256 */
+  id: string;
+  fileSha: string;
+  title: string;
+  author: string | null;
+  language: string | null;
+  bytes: number;
+  addedAt: number;
+  cloud: boolean;
+  uploadedAt: number | null;
+  updatedAt: number;
+  serverUpdatedAt?: number;
+};
+/** A personal book's cover image (never synced: each device takes it from the file). */
+export type PersonalCover = { id: string; data: ArrayBuffer; type: string };
+
 /** Device-local bookkeeping (sync cursor, owner, device id). Never synced. */
 export type Meta = { key: string; value: unknown };
 
@@ -162,6 +186,8 @@ export class LocalDB extends Dexie {
   remoteDays!: EntityTable<RemoteDay, "id">;
   shelves!: EntityTable<Shelf, "id">;
   shelfItems!: EntityTable<ShelfItem, "id">;
+  personalBooks!: EntityTable<PersonalBook, "id">;
+  personalCovers!: EntityTable<PersonalCover, "id">;
 
   constructor() {
     super("openbanglabooks");
@@ -196,6 +222,10 @@ export class LocalDB extends Dexie {
             b.updatedAt ??= b.createdAt;
           }),
       );
+    this.version(5).stores({
+      personalBooks: "id, addedAt, updatedAt",
+      personalCovers: "id",
+    });
     this.use(outboxMiddleware);
   }
 }

@@ -21,6 +21,7 @@ import {
 import { chapterLabel } from "@/lib/reader/engine";
 import { formatNumber, formatPercent } from "@/lib/i18n/format";
 import { localizedPath, type Locale } from "@/lib/i18n/config";
+import { bookHref } from "@/lib/personal/ids";
 import { t } from "@/lib/i18n/t";
 import type { Dictionary } from "@/lib/i18n/dictionaries/bn";
 import { WhereDataLives } from "@/components/sync/where-data-lives";
@@ -191,12 +192,12 @@ export function NotesView({ locale, labels }: { locale: Locale; labels: Labels }
             return (
               <section key={w.slug} aria-labelledby={`notes-${w.slug}`}>
                 <div className="flex items-center gap-4">
-                  <Link href={localizedPath(locale, `/books/${w.slug}`)} className="w-12 shrink-0" tabIndex={-1} aria-hidden>
+                  <Link href={bookHref(locale, w.slug)} className="w-12 shrink-0" tabIndex={-1} aria-hidden>
                     <BookCover work={w} />
                   </Link>
                   <div className="min-w-0">
                     <h2 id={`notes-${w.slug}`} className="font-display text-2xl leading-snug">
-                      <Link href={localizedPath(locale, `/books/${w.slug}`)} className="hover:underline">
+                      <Link href={bookHref(locale, w.slug)} className="hover:underline">
                         {w.title_bn}
                       </Link>
                     </h2>

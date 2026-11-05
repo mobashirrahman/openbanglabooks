@@ -1,6 +1,7 @@
 import type { CSSProperties } from "react";
 import { cn } from "@/lib/utils";
 import { CLOTHS } from "./cloths";
+import { PersonalCoverImage } from "./personal-cover";
 
 /**
  * Original cloth-bound covers, generated from a work's metadata.
@@ -96,6 +97,7 @@ export function BookCover({ work, className, style, interactive = false }: Props
       >
         {author}
       </span>
+      {work.slug.startsWith("mine-") ? <PersonalCoverImage id={work.slug} /> : null}
     </div>
   );
 }

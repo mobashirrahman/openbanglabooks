@@ -61,6 +61,9 @@ export function AccountPanel({
     setMessage(null);
     try {
       const sb = await getSupabase();
+      // files kept in the account go first (only the Storage API can remove them)
+      const { removeAllAccountFiles } = await import("@/lib/personal/store");
+      await removeAllAccountFiles();
       const { error } = await sb.rpc("delete_my_account");
       if (error) throw error;
       const engine = await import("@/lib/sync/engine");

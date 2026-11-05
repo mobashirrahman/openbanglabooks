@@ -224,3 +224,38 @@ The worker is registered in production builds only. Browser tests block it
 (`serviceWorkers: "block"`), except `offline.spec.ts`, because a worker
 answering requests hides them from `page.route()`.
 
+## 16. A reader's own books: on the device unless asked
+
+An EPUB a reader adds is checked and cleaned in their browser
+(`src/lib/personal/import.ts`), then stored in IndexedDB like a catalogue
+book's file. Nothing about it leaves the device by default: not the file,
+not its title, not a highlight made in it.
+
+- **Cleaning** reuses the catalogue's rules, run on the reader's device:
+  scripts, event handlers, forms, frames, remote images and stylesheets,
+  `javascript:` links and CSS that reaches outside the book are removed
+  (`src/lib/epub/clean.ts`), and the book is repacked. The reader's CSP
+  still applies when it is read: cleaning is the first wall, not the only
+  one. DRM-protected books are refused with a reason; obfuscated fonts are
+  not DRM and are kept.
+- **One id everywhere.** The repacked file is deterministic (sorted entries,
+  a fixed timestamp), so the same EPUB gets the same SHA-256 on every
+  device; the book's id is `mine-` and the first 24 hex digits. Catalogue
+  slugs can never start with `mine-` (a check constraint), so a reader's
+  book can never collide with one.
+- **Staying on the device** is enforced at the sync layer, not by
+  convention: `staysOnDevice` drops every outbox change about a device-only
+  book (its record, library entry, place, highlights, notes, bookmarks)
+  before the push. The test checks the server sees none of it.
+- **"Keep in my account"** is a button, never a default. It uploads the
+  file to a private bucket, in the reader's own folder (`<uid>/<sha>.epub`;
+  50 MB a file, 200 files and 1 GB per reader, enforced in the storage
+  policy), and requeues the book's rows so they sync from then on. Another
+  device sees the book and downloads the file on demand, checking its hash.
+- **Deleting** removes the file from storage first, then every row. Account
+  deletion empties the folder first; the database refuses to delete an
+  account while files remain, so no bytes are orphaned.
+- **Sign-out** keeps device-only books (they were never the account's) and
+  removes books that came from the account. "Remove everything from this
+  device" removes both.
+

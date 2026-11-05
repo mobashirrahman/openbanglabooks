@@ -2,6 +2,7 @@ import type {
   Annotation,
   Bookmark,
   LibraryEntry,
+  PersonalBook,
   ReadingDay,
   ReadingPosition,
   RemoteDay,
@@ -29,7 +30,8 @@ export type ServerTable =
   | "bookmarks"
   | "annotations"
   | "reader_settings"
-  | "reading_days";
+  | "reading_days"
+  | "personal_books";
 
 export const SERVER_TABLE: Record<SyncedTable, ServerTable> = {
   library: "user_books",
@@ -40,7 +42,34 @@ export const SERVER_TABLE: Record<SyncedTable, ServerTable> = {
   annotations: "annotations",
   settings: "reader_settings",
   days: "reading_days",
+  personalBooks: "personal_books",
 };
+
+const PERSONAL = "mine-";
+/**
+ * The book a local row belongs to, if the row is about one book. Rows of a
+ * reader's own book that is kept on this device only never leave it.
+ */
+export function bookOf(t: SyncedTable, pk: string, row: Record<string, unknown> | null | undefined): string | null {
+  switch (t) {
+    case "library":
+    case "positions":
+    case "personalBooks":
+      return pk;
+    case "bookmarks":
+    case "annotations":
+    case "shelfItems":
+      return typeof row?.workSlug === "string" ? row.workSlug : null;
+    default:
+      return null;
+  }
+}
+
+/** True for a change that must stay on this device: it belongs to one of the reader's own books not kept in the account. */
+export function staysOnDevice(t: SyncedTable, pk: string, row: Record<string, unknown> | null | undefined, deviceOnly: ReadonlySet<string>): boolean {
+  const book = bookOf(t, pk, row);
+  return book !== null && book.startsWith(PERSONAL) && deviceOnly.has(book);
+}
 
 /** A change for sync_push. */
 export type Change = { t: ServerTable; id: string; u: number; d?: true; b?: number; r?: Record<string, unknown> };
@@ -155,6 +184,19 @@ function toServerRow(t: SyncedTable, row: Record<string, unknown>, device: Devic
     case "days": {
       const d = row as ReadingDay;
       return { device_id: device.id, day: d.day, seconds: Math.max(0, Math.min(86400, Math.round(d.seconds))) };
+    }
+    case "personalBooks": {
+      const b = row as PersonalBook;
+      if (!b.cloud) return null; // kept on this device only
+      return {
+        file_sha: b.fileSha,
+        title: cut(b.title, 500),
+        author: cut(b.author, 500),
+        language: cut(b.language, 35),
+        bytes: b.bytes,
+        added_at: b.addedAt ?? null,
+        uploaded_at: b.uploadedAt ?? null,
+      };
     }
   }
 }
@@ -294,6 +336,23 @@ export function fromServer(t: ServerTable, r: ServerRow, device: Device): LocalT
       if (gone) return { table: "remoteDays", pk: r.id, row: null };
       const rd: RemoteDay = { id: r.id, deviceId: r.device_id as string, day, seconds: (r.seconds as number) ?? 0 };
       return { table: "remoteDays", pk: r.id, row: rd };
+    }
+    case "personal_books": {
+      if (gone) return { table: "personalBooks", pk: r.id, row: null };
+      const b: PersonalBook = {
+        id: r.id,
+        fileSha: r.file_sha as string,
+        title: (r.title as string) ?? "",
+        author: (r.author as string | null) ?? null,
+        language: (r.language as string | null) ?? null,
+        bytes: (r.bytes as number) ?? 0,
+        addedAt: (r.added_at as number) ?? r.updated_at,
+        // everything on the server was kept in the account
+        cloud: true,
+        uploadedAt: (r.uploaded_at as number | null) ?? null,
+        ...seen,
+      };
+      return { table: "personalBooks", pk: r.id, row: b };
     }
   }
 }

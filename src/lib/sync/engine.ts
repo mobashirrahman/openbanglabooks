@@ -2,14 +2,15 @@
 
 import { liveQuery } from "dexie";
 import type { SupabaseClient } from "@supabase/supabase-js";
-import { localDB, markHasProgress, type Annotation, type ReadingPosition, type RemotePosition } from "@/lib/local/db";
+import { localDB, markHasProgress, type Annotation, type PersonalBook, type ReadingPosition, type RemotePosition } from "@/lib/local/db";
 import { markUntracked, outboxKey, SYNCED_TABLES, type OutboxEntry } from "@/lib/local/outbox";
 import { clearAccountData } from "@/lib/local/wipe";
 import { getSupabase, onAccountChange, signOut } from "@/lib/account/session";
 import { READER_SETTINGS_KEY } from "@/lib/reader/settings";
 import { thisDevice, type Device } from "./device";
 import { decide, type LocalState } from "./merge";
-import { fromServer, toChange, toDeletion, type Change, type ServerRow, type ServerTable } from "./tables";
+import { fromServer, staysOnDevice, toChange, toDeletion, type Change, type ServerRow, type ServerTable } from "./tables";
+import { forgetPersonalFiles, requeueBook } from "@/lib/personal/queue";
 import { setSyncStatus } from "./status";
 
 /**
@@ -179,15 +180,17 @@ async function push(sb: SupabaseClient, device: Device, uid: string) {
     checkStillSignedIn(uid);
     const entries = await db.outbox.orderBy("changedAt").limit(PUSH_BATCH).toArray();
     if (!entries.length) return;
+    // the reader's own books kept on this device only: nothing about them is sent
+    const deviceOnly = new Set((await db.personalBooks.filter((b) => !b.cloud).primaryKeys()) as string[]);
     const changes: Change[] = [];
     for (const entry of entries) {
       if (entry.deleted) {
-        const c = toDeletion(entry, device);
+        const c = staysOnDevice(entry.t, entry.pk, null, deviceOnly) ? null : toDeletion(entry, device);
         if (c) changes.push(c);
         continue;
       }
       const row = await db.table(entry.t).get(entry.pk);
-      const c = row ? toChange(entry.t, row, entry.pk, device) : null;
+      const c = row && !staysOnDevice(entry.t, entry.pk, row, deviceOnly) ? toChange(entry.t, row, entry.pk, device) : null;
       if (c) changes.push(c);
     }
     if (changes.length) await pushChanges(sb, changes);
@@ -240,6 +243,10 @@ const newId = () => globalThis.crypto?.randomUUID?.() ?? `${Date.now().toString(
 async function apply(page: PullPage, device: Device) {
   const db = localDB();
   const copies: Annotation[] = [];
+  /** own books this device kept to itself, now in the account (kept there from another device) */
+  const nowInAccount: string[] = [];
+  /** own books removed on another device */
+  const removedBooks: PersonalBook[] = [];
   let readerSettings: unknown;
   let positionsAdded = false;
   const scope = [...SYNCED_TABLES, "remotePositions", "remoteDays", "outbox", "meta"].map((n) => db.table(n));
@@ -274,6 +281,10 @@ async function apply(page: PullPage, device: Device) {
         else await table.delete(target.pk);
         if (pending) await db.outbox.delete(key);
         if (target.table === "settings" && target.pk === READER_SETTINGS_KEY) readerSettings = target.row?.value;
+        if (target.table === "personalBooks" && current) {
+          if (!target.row) removedBooks.push(current as unknown as PersonalBook);
+          else if (!(current as unknown as PersonalBook).cloud) nowInAccount.push(target.pk);
+        }
         if (target.table === "positions" && target.row) positionsAdded = true;
       } else {
         if (decision === "keep-copy-server" && target.row) copies.push({ ...(target.row as Annotation), id: newId(), conflictOf: target.pk, serverUpdatedAt: undefined });
@@ -287,6 +298,8 @@ async function apply(page: PullPage, device: Device) {
 
   // conflict copies are new local rows: written normally, so they are pushed
   if (copies.length) await db.annotations.bulkPut(copies);
+  for (const id of nowInAccount) await requeueBook(id);
+  if (removedBooks.length) await forgetPersonalFiles(removedBooks);
   if (readerSettings !== undefined) {
     try {
       localStorage.setItem(READER_SETTINGS_KEY, JSON.stringify(readerSettings));

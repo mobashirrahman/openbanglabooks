@@ -30,7 +30,8 @@ import { applyHighlightTheme } from "@/lib/reader/annotations";
 export type ReaderProps = {
   work: WorkSnapshot & { title_en: string };
   fileSha: string;
-  fileUrl: string;
+  /** null for a reader's own book: its file is only in IndexedDB */
+  fileUrl: string | null;
   bookHref: string;
   locale: Locale;
   labels: Dictionary["reader"] & { back: string; retry: string; undo: string; deleted: string; allNotes: string; notesHref: string };

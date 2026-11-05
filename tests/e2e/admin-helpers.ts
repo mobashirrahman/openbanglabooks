@@ -7,7 +7,7 @@ import { createClient, type SupabaseClient } from "@supabase/supabase-js";
  * test account an editor, and removes the catalogue rows a test created.
  */
 let client: SupabaseClient | null = null;
-function service() {
+export function service() {
   if (!client) {
     try {
       process.loadEnvFile(join(process.cwd(), ".env.local"));

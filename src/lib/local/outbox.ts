@@ -12,7 +12,7 @@ import type { DBCore, DBCoreMutateRequest, DBCoreMutateResponse, Middleware } fr
  */
 
 /** Local tables whose rows sync to the account. */
-export const SYNCED_TABLES = ["library", "shelves", "shelfItems", "positions", "bookmarks", "annotations", "settings", "days"] as const;
+export const SYNCED_TABLES = ["library", "shelves", "shelfItems", "positions", "bookmarks", "annotations", "settings", "days", "personalBooks"] as const;
 export type SyncedTable = (typeof SYNCED_TABLES)[number];
 const SYNCED = new Set<string>(SYNCED_TABLES);
 

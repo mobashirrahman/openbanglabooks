@@ -25,10 +25,22 @@ export const LIMITS = {
 
 const SCRIPT_PATTERNS = [/<script\b/i, /\son[a-z]+\s*=/i, /javascript:/i, /<iframe\b/i, /<object\b/i, /<embed\b/i];
 
-export function validateEpub(bytes: Uint8Array): EpubReport {
+export type ValidateOptions = {
+  /**
+   * For a reader's own files (personal import), which are repacked anyway:
+   * packaging slips (mimetype not first or compressed, a manifest item
+   * missing) are warnings, not errors.
+   */
+  lenient?: boolean;
+  /** also return the unpacked entries (never stored with the report) */
+  keepFiles?: boolean;
+};
+
+export function validateEpub(bytes: Uint8Array, options: ValidateOptions = {}): EpubReport & { files?: Record<string, Uint8Array> } {
   const errors: string[] = [];
   const warnings: string[] = [];
-  const report: EpubReport = { ok: false, errors, warnings, entries: 0, uncompressedBytes: 0 };
+  const report: EpubReport & { files?: Record<string, Uint8Array> } = { ok: false, errors, warnings, entries: 0, uncompressedBytes: 0 };
+  const slip = options.lenient ? warnings : errors;
 
   if (bytes.byteLength > LIMITS.maxBytes) {
     errors.push(`File is larger than ${LIMITS.maxBytes / 1024 / 1024} MB`);
@@ -43,12 +55,12 @@ export function validateEpub(bytes: Uint8Array): EpubReport {
   const extraLen = bytes[28] | (bytes[29] << 8);
   const method = bytes[8] | (bytes[9] << 8);
   const firstName = strFromU8(bytes.subarray(30, 30 + nameLen));
-  if (firstName !== "mimetype") errors.push("First entry must be 'mimetype'");
+  if (firstName !== "mimetype") slip.push("First entry must be 'mimetype'");
   else {
-    if (method !== 0) errors.push("'mimetype' must be stored without compression");
+    if (method !== 0) slip.push("'mimetype' must be stored without compression");
     const start = 30 + nameLen + extraLen;
     const content = strFromU8(bytes.subarray(start, start + 20));
-    if (content !== "application/epub+zip") errors.push("'mimetype' must be application/epub+zip");
+    if (method === 0 && content !== "application/epub+zip") slip.push("'mimetype' must be application/epub+zip");
   }
 
   let total = 0;
@@ -94,7 +106,7 @@ export function validateEpub(bytes: Uint8Array): EpubReport {
 
   const base = opfPath.includes("/") ? opfPath.slice(0, opfPath.lastIndexOf("/") + 1) : "";
   const hrefs = [...opfText.matchAll(/<item\b[^>]*\shref="([^"]+)"/g)].map((m) => decodeURIComponent(m[1]));
-  for (const href of hrefs) if (!files[base + href]) errors.push(`Manifest item missing: ${href}`);
+  for (const href of hrefs) if (!files[base + href]) slip.push(`Manifest item missing: ${href}`);
   if (!/<spine\b/.test(opfText)) errors.push("No spine");
 
   for (const [name, data] of Object.entries(files)) {
@@ -104,5 +116,6 @@ export function validateEpub(bytes: Uint8Array): EpubReport {
   }
 
   report.ok = errors.length === 0;
+  if (options.keepFiles) Object.defineProperty(report, "files", { value: files, enumerable: false });
   return report;
 }

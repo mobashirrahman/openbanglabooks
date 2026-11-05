@@ -11,11 +11,13 @@ export class BookFileError extends Error {}
  * Files are immutable (content-addressed), so a cached copy never goes stale
  * and the book reopens offline.
  */
-export async function loadEpubBytes(sha256: string, url: string): Promise<Uint8Array> {
+export async function loadEpubBytes(sha256: string, url: string | null): Promise<Uint8Array> {
   const db = localDB();
   const cached = await db.files.get(sha256).catch(() => undefined);
   if (cached?.data) return new Uint8Array(cached.data);
   if (cached?.blob) return new Uint8Array(await cached.blob.arrayBuffer());
+  // a reader's own book lives only in IndexedDB
+  if (!url) throw new BookFileError("not on this device");
   let res: Response;
   try {
     res = await fetch(url);

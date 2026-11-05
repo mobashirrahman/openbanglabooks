@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useCallback, useMemo, useState } from "react";
 import Link from "next/link";
 import { useLiveQuery } from "dexie-react-hooks";
 import { Bookmark as BookmarkIcon, Heart, Pencil, Plus, Star, Trash2, X } from "lucide-react";
@@ -13,19 +13,23 @@ import { t } from "@/lib/i18n/t";
 import type { Dictionary } from "@/lib/i18n/dictionaries/bn";
 import { WhereDataLives } from "@/components/sync/where-data-lives";
 import { cn } from "@/lib/utils";
+import { Toast, toastId, type ToastMessage } from "@/components/ui/toast";
 import { ShelfNameDialog } from "./shelf-name-dialog";
 import { STATUSES, statusLabel } from "./library-control";
+import { ImportBookButton, ImportBookDialog, useBookImport } from "@/components/personal/import-book";
+import { OwnBooks } from "@/components/personal/own-books";
+import { bookHref } from "@/lib/personal/ids";
 
 type Labels = Dictionary["library"] & { want: string; remove: string; continueReading: string; signIn: string; cancel: string };
 
 /** A book in the reader's library, from its library entry and/or reading position. */
 type Book = { slug: string; work: WorkSnapshot; status: LibraryStatus; entry?: LibraryEntry; position?: ReadingPosition };
-type Tab = "all" | LibraryStatus | "favourites" | "history" | `shelf:${string}`;
+type Tab = "all" | LibraryStatus | "favourites" | "own" | "history" | `shelf:${string}`;
 
-export function LibraryView({ locale, labels }: { locale: Locale; labels: Labels }) {
+export function LibraryView({ locale, labels, personal }: { locale: Locale; labels: Labels; personal: Dictionary["personal"] }) {
   const data = useLiveQuery(async () => {
     const db = localDB();
-    const [positions, library, bookmarks, shelves, shelfItems, days, remoteDays] = await Promise.all([
+    const [positions, library, bookmarks, shelves, shelfItems, days, remoteDays, own] = await Promise.all([
       db.positions.orderBy("openedAt").reverse().toArray(),
       db.library.orderBy("updatedAt").reverse().toArray(),
       db.bookmarks.orderBy("createdAt").reverse().toArray(),
@@ -33,10 +37,14 @@ export function LibraryView({ locale, labels }: { locale: Locale; labels: Labels
       db.shelfItems.toArray(),
       db.days.toArray(),
       db.remoteDays.toArray(),
+      db.personalBooks.count(),
     ]);
-    return { positions, library, bookmarks, shelves, shelfItems, days: [...days, ...remoteDays] };
+    return { positions, library, bookmarks, shelves, shelfItems, days: [...days, ...remoteDays], own };
   }, []);
   const [tab, setTab] = useState<Tab>("all");
+  const imp = useBookImport(personal);
+  const [toast, setToast] = useState<ToastMessage | null>(null);
+  const notify = useCallback((text: string) => setToast({ id: toastId(), text, duration: 4000 }), []);
   const [naming, setNaming] = useState<null | { kind: "new" } | { kind: "rename"; id: string; name: string }>(null);
 
   const books = useMemo(() => {
@@ -56,18 +64,27 @@ export function LibraryView({ locale, labels }: { locale: Locale; labels: Labels
   const favourites = all.filter((b) => b.entry?.favourite);
   const empty = !all.length && !data.bookmarks.length && !data.shelves.length;
 
+  // the dialog stays where it is when the first book turns the empty library into a full one
+  const importDialog = <ImportBookDialog key="import" imp={imp} locale={locale} labels={personal} />;
+  const notice = <Toast key="toast" toast={toast} onDone={() => setToast(null)} className="bottom-20 pb-safe lg:bottom-6" />;
+
   if (empty) {
-    return (
-      <div className="space-y-8">
+    return [
+      <div key="view" className="space-y-8">
         <div className="rounded-[14px] border border-dashed border-line-strong px-6 py-14 text-center">
           <p className="mx-auto max-w-md text-fg-muted">{labels.empty}</p>
-          <Link href={localizedPath(locale, "/")} className="mt-6 inline-flex h-11 items-center rounded-control bg-cloth px-5 text-on-cloth hover:bg-cloth-raised">
-            {locale === "bn" ? "বই খুঁজুন" : "Find a book"}
-          </Link>
+          <div className="mt-6 flex flex-wrap items-center justify-center gap-3">
+            <Link href={localizedPath(locale, "/")} className="inline-flex h-11 items-center rounded-control bg-cloth px-5 text-on-cloth hover:bg-cloth-raised">
+              {locale === "bn" ? "বই খুঁজুন" : "Find a book"}
+            </Link>
+            <ImportBookButton imp={imp} labels={personal} className="h-11 rounded-control" />
+          </div>
         </div>
         <WhereDataLives locale={locale} local={labels.localNote} synced={labels.syncedNote} signIn={labels.signIn} next="/library" />
-      </div>
-    );
+      </div>,
+      importDialog,
+      notice,
+    ];
   }
 
   const n = (x: number) => formatNumber(x, locale);
@@ -75,6 +92,7 @@ export function LibraryView({ locale, labels }: { locale: Locale; labels: Labels
     { id: "all", label: labels.all },
     ...STATUSES.filter((s) => s !== "dnf" || byStatus("dnf").length).map((s) => ({ id: s as Tab, label: statusLabel(s, labels), count: byStatus(s).length })),
     ...(favourites.length ? [{ id: "favourites" as Tab, label: labels.favourites, count: favourites.length }] : []),
+    ...(data.own ? [{ id: "own" as Tab, label: personal.ownBooks, count: data.own }] : []),
     ...data.shelves.map((s) => ({
       id: `shelf:${s.id}` as Tab,
       label: s.name,
@@ -85,8 +103,8 @@ export function LibraryView({ locale, labels }: { locale: Locale; labels: Labels
   const active = tabs.some((x) => x.id === tab) ? tab : "all";
   const shelf = active.startsWith("shelf:") ? data.shelves.find((s) => `shelf:${s.id}` === active) : undefined;
 
-  return (
-    <div className="space-y-10">
+  return [
+    <div key="view" className="space-y-10">
       <div className="-mx-4 flex items-center gap-2 overflow-x-auto px-4 pb-1 [scrollbar-width:none] sm:mx-0 sm:flex-wrap sm:px-0">
         <div role="tablist" aria-label={labels.shelves} className="flex shrink-0 gap-2 sm:flex-wrap">
           {tabs.map((x) => (
@@ -116,6 +134,7 @@ export function LibraryView({ locale, labels }: { locale: Locale; labels: Labels
           <Plus aria-hidden className="size-4" />
           {labels.newShelf}
         </button>
+        <ImportBookButton imp={imp} labels={personal} className="sm:ml-auto" />
       </div>
 
       <div id="library-panel" role="tabpanel" aria-labelledby={`tab-${active}`} className="space-y-14">
@@ -133,6 +152,8 @@ export function LibraryView({ locale, labels }: { locale: Locale; labels: Labels
           <BookGrid books={byStatus(active)} locale={locale} labels={labels} emptyText={labels.emptyStatus} />
         ) : active === "favourites" ? (
           <BookGrid books={favourites} locale={locale} labels={labels} emptyText={labels.emptyStatus} />
+        ) : active === "own" ? (
+          <OwnBooks locale={locale} labels={personal} onNotice={notify} />
         ) : active === "history" ? (
           <History books={all} days={data.days} locale={locale} labels={labels} />
         ) : shelf ? (
@@ -197,8 +218,10 @@ export function LibraryView({ locale, labels }: { locale: Locale; labels: Labels
           setNaming(null);
         }}
       />
-    </div>
-  );
+    </div>,
+    importDialog,
+    notice,
+  ];
 }
 
 function Section({ title, children }: { title: string; children: React.ReactNode }) {
@@ -285,7 +308,7 @@ function BookGrid({
     <ul className="grid grid-cols-3 gap-5 sm:grid-cols-5 lg:grid-cols-7">
       {books.map((b) => (
         <li key={b.slug} className="group relative">
-          <Link href={localizedPath(locale, `/books/${b.slug}`)} className="block">
+          <Link href={bookHref(locale, b.slug)} className="block">
             <BookCover work={b.work} interactive />
             <span className="mt-2 block truncate font-display">{b.work.title_bn}</span>
             {b.entry?.rating || b.entry?.favourite ? (
@@ -391,7 +414,7 @@ function History({ books, days, locale, labels }: { books: Book[]; days: { day: 
                   .map(({ book, at }) => (
                     <li key={book.slug}>
                       <Link
-                        href={localizedPath(locale, `/books/${book.slug}`)}
+                        href={bookHref(locale, book.slug)}
                         className="flex items-center gap-4 rounded-[14px] border border-line bg-surface p-3 transition-colors hover:border-line-strong"
                       >
                         <div className="w-11 shrink-0">
