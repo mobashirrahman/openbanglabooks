@@ -165,9 +165,10 @@ Everything is stored locally with `updatedAt` on every row, ready for sync.
   Bengali-only title may not be found there.
 - **Connections need setting up per site.** Hardcover needs a registered
   OAuth application (client id, secret and redirect URI) and both need
-  `CONNECTIONS_KEY`; without them the profile says "not available". They
-  were verified against stand-ins that follow the documentation, not yet
-  against the live services.
+  `CONNECTIONS_KEY`; without them the profile says "not available". Their
+  requests were checked against the live services with a reader's own
+  accounts (decision 18); Hardcover's OAuth sign-in itself still waits for
+  a registered client.
 - **Deleting a highlight here does not delete it in Readwise,** and
   Hardcover reviews and journal entries do not move either way (see
   decision 18 for why).

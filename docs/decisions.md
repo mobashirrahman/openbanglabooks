@@ -364,3 +364,18 @@ Both services' documentation was re-checked on 2026-11-05.
   (`tests/e2e/mock-upstreams.ts`) that follow the documented behaviour:
   PKCE, Basic client auth, rotating refresh tokens that revoke the chain
   when replayed, and highlight updates by `highlight_url`.
+- **Checked live** on 2026-11-05, with a reader's own accounts and the
+  app's own server code (a Hardcover personal token standing in for the
+  OAuth one, sent the same way, as a bearer token). Hardcover: the reader,
+  the library, the catalogue search (the Bengali গোরা is found by its
+  Bengali title), and a book added quietly (no activity in the feed),
+  read back, left alone when sent again, then removed; every input field
+  and mutation used exists in the live schema. Readwise: the token
+  check, a highlight sent with its title, author, note and link, the same
+  highlight sent again updated rather than doubled, then deleted. Readwise
+  lists each highlight with our link, which is how a later "delete there
+  too" could find it; it keeps the book, empty, after its last highlight
+  goes. Hardcover's OAuth sign-in itself (authorize, token, refresh,
+  revoke) has not met the live service: it needs a registered client. A
+  personal token may do everything, so whether the four scopes above are
+  enough is also still to be seen.
