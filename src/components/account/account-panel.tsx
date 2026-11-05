@@ -1,8 +1,8 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import Link from "next/link";
-import { LogIn, LogOut, UserRound } from "lucide-react";
+import { LibraryBig, LogIn, LogOut, UserRound } from "lucide-react";
 import { accountsEnabled, getSupabase, useAccount } from "@/lib/account/session";
 import { SyncStatusLine } from "@/components/sync/sync-indicator";
 import { localizedPath, type Locale } from "@/lib/i18n/config";
@@ -15,8 +15,19 @@ type Labels = Dictionary["account"];
 type SyncLabels = Dictionary["sync"];
 
 /** The account block on the profile page: sign in, or who is signed in, sign out and delete. */
-export function AccountPanel({ locale, labels, syncLabels }: { locale: Locale; labels: Labels; syncLabels: SyncLabels }) {
+export function AccountPanel({
+  locale,
+  labels,
+  syncLabels,
+  editLabel,
+}: {
+  locale: Locale;
+  labels: Labels;
+  syncLabels: SyncLabels;
+  editLabel: string;
+}) {
   const account = useAccount();
+  const editor = useIsEditor(account.status === "signed-in" ? account.user.id : null);
   const [confirming, setConfirming] = useState(false);
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
@@ -72,6 +83,15 @@ export function AccountPanel({ locale, labels, syncLabels }: { locale: Locale; l
         <span className="min-w-0 [overflow-wrap:anywhere]">{t(labels.signedInAs, { email: account.user.email ?? "" })}</span>
       </p>
       <SyncStatusLine locale={locale} labels={syncLabels} />
+      {editor ? (
+        <Link
+          href={localizedPath(locale, "/admin")}
+          className="inline-flex h-11 items-center gap-2 rounded-control border border-line-strong px-4 hover:bg-sunken"
+        >
+          <LibraryBig aria-hidden className="size-5" />
+          {editLabel}
+        </Link>
+      ) : null}
       <div className="space-y-2">
         <button
           type="button"
@@ -139,4 +159,24 @@ export function AccountPanel({ locale, labels, syncLabels }: { locale: Locale; l
       ) : null}
     </div>
   );
+}
+
+/** Whether the signed-in reader may edit the catalogue (a link only; the admin checks for itself). */
+function useIsEditor(userId: string | null) {
+  const [editor, setEditor] = useState<{ id: string; yes: boolean } | null>(null);
+  useEffect(() => {
+    if (!userId) return;
+    let live = true;
+    void getSupabase()
+      .then((sb) => sb.from("profiles").select("role").eq("id", userId).maybeSingle())
+      .then((res) => {
+        const role = res?.data?.role as string | undefined;
+        if (live) setEditor({ id: userId, yes: role === "editor" || role === "admin" });
+      })
+      .catch(() => {});
+    return () => {
+      live = false;
+    };
+  }, [userId]);
+  return Boolean(userId && editor?.id === userId && editor.yes);
 }
