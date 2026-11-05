@@ -53,6 +53,7 @@ test.describe("library: statuses, shelves, ratings and reflections", () => {
   });
 
   test("a book is given a status, a heart, a shelf, a rating and a private reflection", async ({ page }, info) => {
+    test.slow(); // many steps; the WebKit phone project needs more than the default minute
     await page.goto("/books/kapalkundala");
     await page.getByRole("button", { name: "লাইব্রেরিতে রাখুন" }).first().click();
 

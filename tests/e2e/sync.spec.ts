@@ -110,6 +110,7 @@ test.describe("sync between devices", () => {
 
     // ── device 1 deletes the highlight; it disappears on device 2
     await page.getByRole("button", { name: "হাইলাইট মুছুন" }).click();
+    await expect(page.getByText(edited)).toHaveCount(0); // deleted here before leaving the page
     await waitForSynced(page);
     await second.goto("/notes");
     await expect

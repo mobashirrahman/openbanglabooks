@@ -338,6 +338,7 @@ const en: Dictionary = {
     status: "Sync",
     synced: "In step on all your devices",
     syncing: "Syncing…",
+    checking: "Checking…",
     pending: "{count} changes waiting to sync",
     offline: "Offline — will sync when you're back online",
     offlinePending: "Offline — {count} changes waiting",

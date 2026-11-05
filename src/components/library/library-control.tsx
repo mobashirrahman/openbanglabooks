@@ -82,7 +82,10 @@ export function LibraryControl({ work, labels }: { work: WorkSnapshot; labels: L
           <DropdownMenu.Content
             align="start"
             sideOffset={6}
-            className="z-50 max-h-[70dvh] min-w-[15rem] overflow-y-auto rounded-[14px] border border-line bg-surface p-1.5 text-fg shadow-sheet data-[state=open]:animate-in data-[state=open]:fade-in-0 data-[state=open]:zoom-in-95"
+            collisionPadding={8}
+            // never taller than the room beside the button: on a short phone screen the
+            // menu scrolls inside itself instead of running off the bottom
+            className="z-50 max-h-[min(70dvh,var(--radix-dropdown-menu-content-available-height))] min-w-[15rem] overflow-y-auto overscroll-contain rounded-[14px] border border-line bg-surface p-1.5 text-fg shadow-sheet data-[state=open]:animate-in data-[state=open]:fade-in-0 data-[state=open]:zoom-in-95"
           >
             <DropdownMenu.RadioGroup value={entry.status} onValueChange={(v) => void setStatus(work, v as LibraryStatus)}>
               {STATUSES.map((s) => (

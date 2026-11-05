@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
-import { CloudAlert, CloudCheck, CloudOff, CloudUpload } from "lucide-react";
+import { Cloud, CloudAlert, CloudCheck, CloudOff, CloudUpload } from "lucide-react";
 import { useAccount } from "@/lib/account/session";
 import { requestSyncNow, useSyncStatus, type SyncStatus } from "@/lib/sync/status";
 import { formatNumber } from "@/lib/i18n/format";
@@ -18,6 +18,8 @@ export function syncText(s: SyncStatus, labels: Labels, locale: Locale): string 
   if (s.phase === "offline") return s.pending ? t(labels.offlinePending, { count: formatNumber(s.pending, locale) }) : labels.offline;
   if (s.phase === "error") return labels.error;
   if (s.pending) return t(labels.pending, { count: formatNumber(s.pending, locale) });
+  // signed in, but this page has not synced yet: never claim "in step" before checking
+  if (s.phase === "off") return labels.checking;
   return labels.synced;
 }
 
@@ -25,6 +27,7 @@ function Icon({ s, className }: { s: SyncStatus; className?: string }) {
   if (s.phase === "offline") return <CloudOff aria-hidden className={className} />;
   if (s.phase === "error") return <CloudAlert aria-hidden className={className} />;
   if (s.phase === "syncing" || s.pending) return <CloudUpload aria-hidden className={cn(className, s.phase === "syncing" && "animate-pulse")} />;
+  if (s.phase === "off") return <Cloud aria-hidden className={className} />;
   return <CloudCheck aria-hidden className={className} />;
 }
 
