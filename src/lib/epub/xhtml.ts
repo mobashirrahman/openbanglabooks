@@ -17,9 +17,30 @@ const keepClass: AttrRule = (v) => {
 };
 const keepId: AttrRule = (v) => (/^[A-Za-z][\w.:-]*$/.test(v) ? v : null);
 const keepFragmentHref: AttrRule = (v) => (/^#[\w.:%-]+$/.test(v) ? v : null);
+const keepExternalHref: AttrRule = (v) =>
+  /^(?:#[\w.:%-]+|https?:\/\/[^\s"'<>]+|mailto:[^\s"'<>]+)$/.test(v) ? v : null;
 const keepSpan: AttrRule = (v) => (/^\d{1,2}$/.test(v) ? v : null);
+const keepDimension: AttrRule = (v) => (/^\d{1,5}$/.test(v) ? v : null);
+const keepText: AttrRule = (v) => (v.trim() ? v : null);
+const keepLocalImage: AttrRule = (v) => (/^(?:\.\.\/)?images\/[A-Za-z0-9._-]+$/.test(v) ? v : null);
+const keepRole: AttrRule = (v) =>
+  /^(?:doc-pagebreak|doc-footnote|doc-endnote|doc-toc|doc-bibliography|presentation|img)$/.test(v) ? v : null;
+const keepEpubType: AttrRule = (v) =>
+  /^(?:cover|titlepage|frontmatter|bodymatter|chapter|part|colophon|toc|landmarks|pagebreak|footnote|endnotes|dedication|epigraph|preface|introduction|bibliography|index|appendix|afterword|foreword|acknowledgments|contributors|copyright-page|halftitlepage|imprint|other-credits|revision-history|title-page)$/.test(
+    v,
+  )
+    ? v
+    : null;
 
-const GLOBAL_ATTRS: Record<string, AttrRule> = { class: keepClass, id: keepId };
+const GLOBAL_ATTRS: Record<string, AttrRule> = {
+  class: keepClass,
+  id: keepId,
+  role: keepRole,
+  title: keepText,
+  "aria-label": keepText,
+  "aria-hidden": (v) => (v === "true" ? v : null),
+  "epub:type": keepEpubType,
+};
 
 const ELEMENTS: Record<string, Record<string, AttrRule>> = {
   p: {},
@@ -44,11 +65,16 @@ const ELEMENTS: Record<string, Record<string, AttrRule>> = {
   ul: {},
   li: {},
   table: {},
+  caption: {},
   thead: {},
   tbody: {},
+  tfoot: {},
   tr: {},
   td: { colspan: keepSpan, rowspan: keepSpan },
   th: { colspan: keepSpan, rowspan: keepSpan },
+  figure: {},
+  figcaption: {},
+  img: { src: keepLocalImage, alt: keepText, width: keepDimension, height: keepDimension },
   a: { href: keepFragmentHref },
   abbr: {},
   section: {},
@@ -76,12 +102,24 @@ export const ALLOWED_CLASSES = new Set([
   "noteref",
   "scene-break",
   "title-page",
+  "imprint",
+  "author",
+  "edition",
+  "cover-page",
   "colophon",
   "dedication",
   "epigraph",
+  "table-wrap",
+  "equation",
+  "page-anchor",
+  "fn-num",
+  "fn-back",
+  "toc",
+  "caption",
+  "figure",
 ]);
 
-const VOID = new Set(["br", "hr"]);
+const VOID = new Set(["br", "hr", "img"]);
 /** Elements whose content is dropped entirely, not just unwrapped. */
 const DROP = new Set([
   "script",
@@ -100,7 +138,6 @@ const DROP = new Set([
   "meta",
   "svg",
   "math",
-  "img",
   "picture",
   "video",
   "audio",
@@ -109,8 +146,12 @@ const DROP = new Set([
   "title",
 ]);
 
+/** Removes characters that are illegal in XML 1.0. */
+const stripInvalidXml = (s: string) =>
+  s.replace(/[\u0000-\u0008\u000B\u000C\u000E-\u001F￾￿]/g, "");
+
 export function escapeText(s: string): string {
-  return s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+  return stripInvalidXml(s).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
 }
 export function escapeAttr(s: string): string {
   return escapeText(s).replace(/"/g, "&quot;");
@@ -124,34 +165,42 @@ type NodeLike = {
   attributes?: ArrayLike<{ name: string; value: string }>;
 };
 
-/** Removes characters that are illegal in XML 1.0. */
-const stripInvalidXml = (s: string) =>
-  s.replace(/[\u0000-\u0008\u000B\u000C\u000E-\u001F￾￿]/g, "");
+export type SerializeOptions = {
+  /**
+   * Keep http(s) and mailto links. Off by default: ingested Wikisource text
+   * drops external links, while our own generated colophons need them.
+   */
+  allowExternalLinks?: boolean;
+};
 
-export function serializeXhtml(node: NodeLike): string {
+export function serializeXhtml(node: NodeLike, options: SerializeOptions = {}): string {
   let out = "";
   const children = node.childNodes;
-  for (let i = 0; i < children.length; i++) out += serializeNode(children[i]);
+  for (let i = 0; i < children.length; i++) out += serializeNode(children[i], options);
   return out;
 }
 
-function serializeNode(node: NodeLike): string {
+function serializeNode(node: NodeLike, options: SerializeOptions): string {
   if (node.nodeType === 3) return escapeText(stripInvalidXml(node.nodeValue ?? ""));
   if (node.nodeType !== 1) return ""; // comments, processing instructions…
   const name = node.nodeName.toLowerCase();
   if (DROP.has(name)) return "";
   const rules = ELEMENTS[name];
-  if (!rules) return serializeXhtml(node); // unknown element: keep its text, drop the tag
+  if (!rules) return serializeXhtml(node, options); // unknown element: keep its text, drop the tag
   let attrs = "";
   const list = node.attributes ?? [];
   for (let i = 0; i < list.length; i++) {
     const { name: a, value } = list[i];
-    const rule = rules[a] ?? GLOBAL_ATTRS[a];
+    let rule = rules[a] ?? GLOBAL_ATTRS[a];
+    if (name === "a" && a === "href" && options.allowExternalLinks) rule = keepExternalHref;
     const kept = rule?.(value);
     if (kept != null) attrs += ` ${a}="${escapeAttr(kept)}"`;
   }
+  // An image whose src was rejected (remote URL, traversal, javascript:) has
+  // nothing left to show; keep its alt text out rather than a broken <img/>.
+  if (name === "img" && !/(?:^| )src="/.test(attrs)) return "";
   if (VOID.has(name)) return `<${name}${attrs}/>`;
-  const inner = serializeXhtml(node);
+  const inner = serializeXhtml(node, options);
   if (name === "a" && !/href=/.test(attrs) && !/id=/.test(attrs)) return inner; // plain wiki links → text
   if (name === "span" && !attrs) return inner;
   return `<${name}${attrs}>${inner}</${name}>`;

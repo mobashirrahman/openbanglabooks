@@ -4,10 +4,11 @@ import { zipSync, strToU8 } from "fflate";
 import { serializeXhtml } from "@/lib/epub/xhtml";
 import { validateEpub } from "@/lib/epub/validate";
 
-const clean = (html: string) => {
+const cleanWith = (html: string, options: Parameters<typeof serializeXhtml>[1] = {}) => {
   const { document } = parseHTML(`<!doctype html><html><body><main>${html}</main></body></html>`);
-  return serializeXhtml(document.querySelector("main") as never);
+  return serializeXhtml(document.querySelector("main") as never, options);
 };
+const clean = (html: string) => cleanWith(html);
 
 describe("serializeXhtml (sanitizer)", () => {
   it("drops scripts, handlers, iframes, forms and javascript: links", () => {
@@ -27,6 +28,21 @@ describe("serializeXhtml (sanitizer)", () => {
 
   it("drops external links but keeps their text", () => {
     expect(clean(`<a href="https://bn.wikisource.org/wiki/X">উৎস</a>`)).toBe("উৎস");
+  });
+
+  it("can keep external links for generated colophons", () => {
+    expect(cleanWith(`<a href="https://example.org/book">উৎস</a>`, { allowExternalLinks: true })).toBe(
+      `<a href="https://example.org/book">উৎস</a>`,
+    );
+    expect(cleanWith(`<a href="javascript:alert(1)">x</a>`, { allowExternalLinks: true })).toBe("x");
+  });
+
+  it("keeps local figures and drops remote or traversal images", () => {
+    expect(clean(`<figure><img src="../images/img-001.jpg" alt="চিত্র" width="900" height="600"/></figure>`)).toBe(
+      `<figure><img src="../images/img-001.jpg" alt="চিত্র" width="900" height="600"/></figure>`,
+    );
+    expect(clean(`<img src="https://evil.example/x.png" alt="x"/>`)).toBe("");
+    expect(clean(`<img src="../images/../../etc/passwd" alt="x"/>`)).toBe("");
   });
 
   it("emits well-formed XHTML: escapes text and closes void elements", () => {

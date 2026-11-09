@@ -75,6 +75,28 @@ pnpm ingest --only gora,devdas    # selected works
 pnpm exec tsx scripts/ingest/check.ts "<Wikisource root>"   # completeness report for a candidate
 ```
 
+## PDF → EPUB
+
+Scanned or digital PDFs use a separate two-stage pipeline. Python extracts the
+text layer (or runs Surya OCR), detects chapters, parts, footnotes, figures,
+tables and page numbers, then TypeScript builds and validates the EPUB:
+
+```bash
+pnpm pdf:epub -- scan.pdf --out dist/scan.epub \
+  --title "বইয়ের নাম" --author "লেখকের নাম" \
+  --source-name "Scan: 1932 edition" --rights "Public domain"
+
+# or use the pdf-craft Tesseract extractor
+pnpm pdf:craft -- scan.pdf --out dist/scan.epub
+```
+
+The same inclusion rule applies: a PDF conversion is still a candidate that
+needs the rights check and a human review before it enters the catalog. The
+bundle records the source PDF's `sha256`, so the exact scan behind an edition is
+reproducible. See [pdf-to-epub.md](pdf-to-epub.md) for OCR model choice
+(Surya 2.5 is newer, but Surya 2 currently scores higher on Bengali), the review
+checklist, and troubleshooting.
+
 ## Uploading authorised EPUBs (publisher contributions)
 
 Phase 2 adds an admin UI for this. Until then, files that a publisher has

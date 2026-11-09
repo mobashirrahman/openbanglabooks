@@ -52,3 +52,15 @@ next-env.d.ts
 
 # local ingestion cache (raw Wikisource downloads, built EPUBs)
 /.cache/
+
+# PDF → EPUB work bundles and built books
+/.work/
+/dist/
+
+# Python tooling for the PDF → EPUB pipeline
+__pycache__/
+*.py[cod]
+.pytest_cache/
+*.egg-info/
+.venv/
+

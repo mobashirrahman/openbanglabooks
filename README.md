@@ -54,6 +54,9 @@ Useful scripts:
 | Script | What it does |
 |---|---|
 | `pnpm ingest [--only slug,slug] [--dry]` | Wikisource → verified EPUB → storage + catalog ([docs/ingestion.md](docs/ingestion.md)) |
+| `pnpm pdf:epub -- book.pdf [--out dist/book.epub]` | PDF → structured EPUB, with text-layer or Surya OCR extraction ([docs/pdf-to-epub.md](docs/pdf-to-epub.md)) |
+| `pnpm pdf:craft -- book.pdf [--out dist/book.epub]` | PDF → EPUB using the `pdf-craft` Tesseract extraction engine |
+| `pnpm pdf:build --work .work/pdf/book --out dist/book.epub` | Rebuild an EPUB from a PDF work bundle |
 | `pnpm render:og` | Renders Open Graph images from a running site into `public/og` |
 | `pnpm brand` | Regenerates logos, favicon and PWA icons from the mark geometry |
 | `pnpm fonts` | Re-syncs self-hosted Bengali font subsets from @fontsource |
@@ -63,10 +66,16 @@ Useful scripts:
 | `pnpm typecheck` | Route type generation + `tsc` |
 | `pnpm db:test` | Database tests (pgTAP): personal data isolation, sync rules, catalogue permissions, connection secrets |
 
+The PDF tools use a Python sidecar. Install it once with
+`python3 -m venv tools/pdf2epub/.venv && tools/pdf2epub/.venv/bin/pip install -e tools/pdf2epub`.
+For `pnpm pdf:craft`, use Python 3.11-3.13 and add the `pdfcraft` extra; see
+[docs/pdf-to-epub.md](docs/pdf-to-epub.md#pdf-craft-engine).
+
 ## Testing
 
 ```bash
 pnpm test                                   # unit: rights rule, sanitiser, EPUB validation, …
+pnpm pdf:test                               # Python PDF/OCR structure tests (see docs/pdf-to-epub.md)
 pnpm build && pnpm start -p 3100 &          # production server for browser tests
 pnpm test:e2e                               # everything: 6 Chromium + 7 WebKit projects
 pnpm test:e2e:webkit                        # WebKit (Safari engine) only
@@ -137,7 +146,8 @@ src/lib/local/             Dexie schema (local-first state)
 src/components/            brand, cover, catalog, nav, reader, library
 vendor/foliate-js          EPUB engine (git submodule, pinned)
 supabase/                  migrations, seed
-scripts/                   ingestion, fonts, brand, OG rendering, dev screenshots
+scripts/                   ingestion, fonts, brand, OG rendering, PDF → EPUB, dev screenshots
+tools/pdf2epub/            Python PDF inspection, OCR, structure extraction
 content/catalog.yaml       the curated, rights-checked catalog manifest
 docs/                      design, decisions, ingestion, deployment, roadmap
 ```
@@ -147,6 +157,7 @@ docs/                      design, decisions, ingestion, deployment, roadmap
 - [docs/design.md](docs/design.md) — brand, tokens, typography, motion
 - [docs/decisions.md](docs/decisions.md) — architecture decisions and why
 - [docs/ingestion.md](docs/ingestion.md) — adding books, the rights rule
+- [docs/pdf-to-epub.md](docs/pdf-to-epub.md) — scanned PDF → EPUB, OCR models, review checklist
 - [docs/deploy.md](docs/deploy.md) — self-hosted Docker deployment
 - [docs/roadmap.md](docs/roadmap.md) — Phase 2 and 3 plans, known limitations
 
