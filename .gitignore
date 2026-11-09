@@ -64,3 +64,5 @@ __pycache__/
 *.egg-info/
 .venv/
 
+.vinext/
+.cloudflare/

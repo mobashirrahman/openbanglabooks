@@ -3,3 +3,4 @@ allowBuilds:
   unrs-resolver: false
   supabase: true
   esbuild: true
+  workerd: true

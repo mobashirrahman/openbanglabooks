@@ -7,10 +7,12 @@ const securityHeaders = [
   { key: "X-Frame-Options", value: "DENY" },
 ];
 
+const vinextBuild = process.env.npm_lifecycle_event?.includes("vinext") ?? false;
+
 const nextConfig: NextConfig = {
   cacheComponents: true,
   partialPrefetching: true,
-  output: "standalone",
+  output: vinextBuild ? undefined : "standalone",
   // a second build folder lets a test build run beside a server still using .next
   distDir: process.env.NEXT_DIST_DIR || ".next",
   poweredByHeader: false,
