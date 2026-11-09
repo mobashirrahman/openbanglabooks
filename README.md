@@ -159,6 +159,7 @@ docs/                      design, decisions, ingestion, deployment, roadmap
 - [docs/ingestion.md](docs/ingestion.md) — adding books, the rights rule
 - [docs/pdf-to-epub.md](docs/pdf-to-epub.md) — scanned PDF → EPUB, OCR models, review checklist
 - [docs/deploy.md](docs/deploy.md) — self-hosted Docker deployment
+- [docs/deploy-cloudflare.md](docs/deploy-cloudflare.md) — Cloudflare Workers (vinext) deployment
 - [docs/roadmap.md](docs/roadmap.md) — Phase 2 and 3 plans, known limitations
 
 ## Content and licences

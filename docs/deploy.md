@@ -1,5 +1,9 @@
 # Deploying (self-hosted Docker)
 
+> Production currently runs on Cloudflare Workers; see
+> [deploy-cloudflare.md](deploy-cloudflare.md). This page documents the
+> alternative self-hosted Docker deployment.
+
 The app ships as a Next.js standalone server in a container, behind Caddy for
 automatic HTTPS. The database, auth and file storage are Supabase (either
 Supabase Cloud or your own self-hosted Supabase).

@@ -5,9 +5,16 @@ import { connection } from "next/server";
 let buildId: Promise<string> | null = null;
 /** The id of the running build: a new build gives the browser a new worker, which refreshes the kept pages. */
 function currentBuild(): Promise<string> {
-  buildId ??= readFile(path.join(process.cwd(), process.env.NEXT_DIST_DIR || ".next", "BUILD_ID"), "utf8")
-    .then((s) => s.trim().replace(/[^\w-]/g, "") || "dev")
-    .catch(() => "dev");
+  // On Workers there is no filesystem, so the deploy injects NEXT_DEPLOYMENT_ID;
+  // locally we fall back to the build directory's BUILD_ID. Read through an
+  // alias so the bundler does not constant-fold the build-time lookup.
+  const env = process.env;
+  buildId ??=
+    env.NEXT_DEPLOYMENT_ID
+      ? Promise.resolve(env.NEXT_DEPLOYMENT_ID)
+      : readFile(path.join(process.cwd(), env.NEXT_DIST_DIR || ".next", "BUILD_ID"), "utf8")
+          .then((s) => s.trim().replace(/[^\w-]/g, "") || "dev")
+          .catch(() => "dev");
   return buildId;
 }
 
