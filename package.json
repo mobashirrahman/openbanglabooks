@@ -24,6 +24,7 @@
     "pdf:epub": "tsx scripts/pdf/cli.ts",
     "pdf:craft": "tsx scripts/pdf/cli.ts --engine tesseract",
     "pdf:check-ocr": "tsx scripts/pdf/cli.ts --check-ocr",
+    "pdf:install-ocr": "bash scripts/pdf/install-ocr-engines.sh",
     "pdf:build": "tsx scripts/pdf/build.ts",
     "pdf:publish": "tsx scripts/pdf/publish.ts",
     "pdf:test": "tsx scripts/pdf/test.ts",

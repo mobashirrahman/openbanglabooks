@@ -15,6 +15,7 @@ import html as html_lib
 import io
 import json
 import re
+import subprocess
 import uuid
 import zipfile
 from dataclasses import dataclass, field
@@ -1133,6 +1134,19 @@ def _install_tesseract_tsv_fix() -> None:
     module._puthi_tsv_quote_fix = True
 
 
+def _tesseract_label(config: Any) -> str:
+    """Return ``tesseract 5.5.3 ben@md5`` for publication provenance."""
+    try:
+        version = subprocess.run(
+            [config.executable, "--version"], capture_output=True, text=True, timeout=10
+        ).stdout.splitlines()[0].strip()
+        traineddata = Path(config.tessdata_path or "") / f"{config.language}.traineddata"
+        digest = hashlib.md5(traineddata.read_bytes()).hexdigest()[:12]
+        return f"{version} {config.language}@{digest}"
+    except Exception:
+        return "tesseract"
+
+
 def extract_with_pdfcraft(pdf: Path, out: Path, args: Any) -> tuple[BuiltBook, CoverCandidate | None, str, str, str | None]:
     """Run pdf-craft extraction and convert its ``.pcex`` into a puthi bundle."""
     try:
@@ -1151,7 +1165,7 @@ def extract_with_pdfcraft(pdf: Path, out: Path, args: Any) -> tuple[BuiltBook, C
         tessdata_path=getattr(args, "tessdata", None),
         language=getattr(args, "pdfcraft_language", None) or "ben",
     )
-    ocr_label = "pdf-craft/tesseract"
+    ocr_label = f"pdf-craft/{_tesseract_label(ocr)}"
     pcex_path = out / "extraction.pcex"
     if pcex_path.exists():
         pcex_path.unlink()

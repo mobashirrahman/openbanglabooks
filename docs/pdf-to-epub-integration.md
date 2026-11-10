@@ -170,6 +170,23 @@ Verified on Nishkriti 12 pages: front pages 1–2 (50 words), body `এক` page
 3–12 (2147 words), four sections, nav front + `এক`. 31 `pdf2epub` tests and
 `pnpm typecheck` pass.
 
+## Step 8 — Tesseract 5.5.3 pin (implemented)
+
+Added `scripts/pdf/install-ocr-engines.sh` / `pnpm pdf:install-ocr` so the
+pipeline can install the exact conda-forge Tesseract 5.5.3 and the pinned
+`tessdata_best` without root or a pre-existing conda.
+
+Verified on this host:
+
+```text
+tesseract: ok  5.5.3
+tessdata:  ok  6e997a9bc0f9dffc3431a0b16ca856ea
+```
+
+A 2-page Nishkriti extraction with the new binary records
+`pdf-craft/tesseract 5.5.3 ben@6e997a9bc0f9` in both `book.json` and
+`publication.json`.
+
 ## Next planned steps
 
 1. **Structure:** make `recover_structure` the default only where it demonstrably

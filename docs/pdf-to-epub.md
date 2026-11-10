@@ -68,25 +68,40 @@ Surya 2.x needs an inference backend: vLLM on NVIDIA (Docker), or llama.cpp on
 CPU/Apple Silicon. The model manager starts a server on first use. Point it at
 an already-running server with `SURYA_INFERENCE_URL=http://host:port/v1`.
 
-Tesseract 5.5.3 and the pinned Bengali model:
+Install Tesseract 5.5.3 and the pinned Bengali model with the helper (no root
+or conda required):
+
+```bash
+scripts/pdf/install-ocr-engines.sh
+# Default root: ~/.local/share/ocr-engines
+#   tesseract-5.5.3/bin/tesseract
+#   tessdata/ben.traineddata
+```
+
+The script downloads a static micromamba, creates a conda-forge
+`tesseract=5.5.3` environment, downloads the `tessdata_best` `ben` file at the
+pinned commit, and verifies its MD5. Set `OCR_ENGINES_ROOT` to install
+elsewhere. The equivalent manual path is:
 
 ```bash
 # The exact binary; apt may ship an older Tesseract.
 conda create -n pdf-ocr -c conda-forge tesseract=5.5.3
-conda activate pdf-ocr
-
 # tessdata_best, pinned by commit and checksum.
-mkdir -p tessdata
 curl -L -o tessdata/ben.traineddata \
   https://raw.githubusercontent.com/tesseract-ocr/tessdata_best/9ddc24e750eec0994223a9edc3fcb434a2244f3b/ben.traineddata
 echo "6e997a9bc0f9dffc3431a0b16ca856ea  tessdata/ben.traineddata" | md5sum -c -
 ```
 
-Then verify the whole OCR stack:
+Then verify the whole OCR stack (use the installed path):
 
 ```bash
-pnpm pdf:check-ocr --tesseract "$(which tesseract)" --tessdata tessdata
+pnpm pdf:check-ocr --check-engine tesseract \
+  --tesseract "$HOME/.local/share/ocr-engines/tesseract-5.5.3/bin/tesseract" \
+  --tessdata "$HOME/.local/share/ocr-engines/tessdata"
 ```
+
+`publication.json` records the exact OCR revision, e.g.
+`pdf-craft/tesseract 5.5.3 ben@6e997a9bc0f9`.
 
 `pnpm pdf:check-ocr` prints the Surya model, the `surya-ocr` version, the
 Tesseract version and the `ben.traineddata` checksum. Add `--strict` to fail on
