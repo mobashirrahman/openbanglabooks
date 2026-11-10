@@ -108,13 +108,21 @@ In the Supabase dashboard (or `supabase/config.toml` for self-hosting):
   `supabase/config.toml`. With the first-party callback, Google shows
   `openbanglabooks.com` in the consent screen instead of the Supabase project
   domain.
-- **Facebook:** create a Meta app with Facebook Login, add the same callback
-  URL, put its id and secret in Supabase and enable the provider. In the app's
-  **Basic Settings**, set **Privacy Policy URL** to
-  `https://<domain>/en/privacy`, set **Data Deletion Instructions URL** to
-  `https://<domain>/en/data-deletion`, and switch the app to **Live** before
-  readers outside the app's tester list can use it. The public bilingual pages
-  live at `/privacy`, `/en/privacy`, `/data-deletion` and `/en/data-deletion`.
+- **Facebook:** create a Meta app with Facebook Login. Add these **Valid OAuth
+  Redirect URIs**:
+  - `https://<domain>/api/auth/facebook/callback` (first-party sign-in)
+  - `http://localhost:3000/api/auth/facebook/callback` for local development
+  - `https://<ref>.supabase.co/auth/v1/callback` (kept for the Supabase provider)
+
+  Put the app id and secret in Supabase (the provider is used to verify
+  Facebook access tokens) and set `FACEBOOK_CLIENT_ID` plus the server-only
+  `FACEBOOK_CLIENT_SECRET` for the web app/Worker. In the app's **Basic
+  Settings**, add `openbanglabooks.com` to **App Domains**, set **Privacy
+  Policy URL** to `https://<domain>/en/privacy`, set **Data Deletion
+  Instructions URL** to `https://<domain>/en/data-deletion`, and switch the
+  app to **Live** before readers outside the app's tester list can use it. The
+  public bilingual pages live at `/privacy`, `/en/privacy`, `/data-deletion`
+  and `/en/data-deletion`.
 - **Hosted email templates:** after changing `supabase/templates/*.html`,
   either paste them into Authentication → Email Templates or run
   `pnpm exec tsx scripts/update-hosted-email-templates.ts` with a Supabase

@@ -77,18 +77,24 @@ export function SignInForm({ locale, labels }: { locale: Locale; labels: Labels 
     if (accountsEnabled) void getSupabase();
   }, []);
 
-  // an error from the Google callback (?error=…): show it once, then clean the URL
+  // an error from a social callback (?error=…): show it once, then clean the URL
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
     const reason = params.get("error");
     if (!reason) return;
     // one-time read of the callback's URL after hydration, not a render loop
     // eslint-disable-next-line react-hooks/set-state-in-effect
-    setError(reason === "access_denied" ? labels.googleCancelled : labels.googleFailed);
+    setError(
+      reason === "access_denied"
+        ? labels.signInCancelled
+        : reason === "facebook"
+          ? labels.facebookFailed
+          : labels.googleFailed,
+    );
     params.delete("error");
     const search = params.toString();
     window.history.replaceState(null, "", `${window.location.pathname}${search ? `?${search}` : ""}`);
-  }, [labels.googleCancelled, labels.googleFailed]);
+  }, [labels.signInCancelled, labels.facebookFailed, labels.googleFailed]);
 
   if (!accountsEnabled) return <p className="text-fg-muted">{labels.unavailable}</p>;
 
@@ -184,10 +190,11 @@ export function SignInForm({ locale, labels }: { locale: Locale; labels: Labels 
         setBusy(false);
         return;
       }
-      const sb = await getSupabase();
-      const { error } = await sb.auth.signInWithOAuth({ provider: "facebook", options: { redirectTo: confirmUrl() } });
-      if (error) throw error;
-      // the browser is leaving for Facebook; stay busy until it does
+      const params = new URLSearchParams({ next: target(), locale });
+      // a full-page navigation is required: the server route stores the OAuth
+      // state cookie and redirects to Facebook
+      // eslint-disable-next-line @next/next/no-location-assign-relative-destination
+      window.location.assign(`/api/auth/facebook/start?${params.toString()}`);
     } catch (e) {
       setError(errorMessage(e, labels));
       setBusy(false);

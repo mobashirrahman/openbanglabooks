@@ -155,14 +155,14 @@ so matches become exact ranges and CFIs. Vowel signs and hasanta always count.
 Readers create an account with a name, email and password, or continue with
 Google or Facebook. Sign-in is the email and password; a forgotten password
 is reset through an emailed link. Credentials go straight to Supabase Auth
-over HTTPS, never to our server. Google uses a first-party OAuth callback on
-`/api/auth/google/callback`: the code is exchanged server-side (the client
-secret never reaches the browser), Supabase verifies the Google ID token, and
-Google shows our own domain in the consent screen. Facebook uses Supabase's
-hosted PKCE flow. Confirmation and reset links verify their token in the
-browser, so no session token is ever put in the address bar. supabase-js loads
-only when a session cookie exists or on the account pages, so anonymous
-reading pays nothing for accounts.
+over HTTPS, never to our server. Google and Facebook both use first-party OAuth callbacks on
+`/api/auth/google/callback` and `/api/auth/facebook/callback`: the codes are
+exchanged server-side (the client secrets never reach the browser), Supabase
+verifies the Google ID token or Facebook access token, and the providers show
+our own domain in their consent screens. Confirmation and reset links verify
+their token in the browser, so no session token is ever put in the address
+bar. supabase-js loads only when a session cookie exists or on the account
+pages, so anonymous reading pays nothing for accounts.
 
 ## 13. Sync: an outbox written by a Dexie middleware
 
