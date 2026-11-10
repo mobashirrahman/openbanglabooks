@@ -588,6 +588,7 @@ const bn = {
     rightsPolicy: "কোন বই এখানে থাকে",
     dataDeletion: "তথ্য মুছে ফেলা",
     dataDeletionContact: "যোগাযোগ করুন",
+    privacy: "গোপনীয়তা",
   },
   admin: {
     title: "ক্যাটালগ সম্পাদনা",

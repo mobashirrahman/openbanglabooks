@@ -103,9 +103,16 @@ In the Supabase dashboard (or `supabase/config.toml` for self-hosting):
   reports that instead of leaving the site.
 - **Facebook:** create a Meta app with Facebook Login, add the same callback
   URL, put its id and secret in Supabase and enable the provider. In the app's
-  **Basic Settings**, set **Data Deletion Instructions URL** to
-  `https://<domain>/en/data-deletion` (the public bilingual page lives at
-  `/data-deletion` and `/en/data-deletion`).
+  **Basic Settings**, set **Privacy Policy URL** to
+  `https://<domain>/en/privacy`, set **Data Deletion Instructions URL** to
+  `https://<domain>/en/data-deletion`, and switch the app to **Live** before
+  readers outside the app's tester list can use it. The public bilingual pages
+  live at `/privacy`, `/en/privacy`, `/data-deletion` and `/en/data-deletion`.
+- **Hosted email templates:** after changing `supabase/templates/*.html`,
+  either paste them into Authentication → Email Templates or run
+  `pnpm exec tsx scripts/update-hosted-email-templates.ts` with a Supabase
+  access token. The script changes only the confirmation and recovery
+  templates.
 - **Local providers:** put the four `SUPABASE_AUTH_EXTERNAL_*` variables in a
   gitignored `.env.supabase.local`, then run
   `set -a; . ./.env.supabase.local; set +a; pnpm db:start`. The values are

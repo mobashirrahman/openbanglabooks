@@ -3,9 +3,7 @@ import Link from "next/link";
 import { getDictionary, getLocale } from "@/lib/i18n";
 import { localizedPath } from "@/lib/i18n/config";
 import { alternates } from "@/lib/seo/site";
-
-/** The address a reader can write to when they can no longer sign in. */
-const CONTACT_EMAIL = "mobashirrahman@gmail.com";
+import { CONTACT_EMAIL } from "@/lib/contact";
 
 export async function generateMetadata(): Promise<Metadata> {
   const locale = await getLocale();

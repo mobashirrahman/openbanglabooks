@@ -21,6 +21,7 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
     entry("/books", 0.8),
     entry("/authors", 0.6),
     entry("/about/sources", 0.3),
+    entry("/privacy", 0.2),
     entry("/data-deletion", 0.2),
     ...works.map((w) => entry(`/books/${w.slug}`, 0.9, w.created_at)),
     ...authors.map((a) => entry(`/authors/${a.slug}`, 0.7)),

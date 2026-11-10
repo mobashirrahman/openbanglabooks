@@ -33,6 +33,11 @@ export function SiteFooter({ locale, dict }: { locale: Locale; dict: Dictionary 
               </Link>
             </li>
             <li>
+              <Link className="text-fg-muted hover:text-fg hover:underline" href={href("/privacy")}>
+                {dict.footer.privacy}
+              </Link>
+            </li>
+            <li>
               <Link className="text-fg-muted hover:text-fg hover:underline" href={href("/data-deletion")}>
                 {dict.footer.dataDeletion}
               </Link>

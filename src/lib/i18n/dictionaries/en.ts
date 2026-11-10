@@ -591,6 +591,7 @@ const en: Dictionary = {
     rightsPolicy: "What we publish",
     dataDeletion: "Delete your data",
     dataDeletionContact: "Contact us",
+    privacy: "Privacy",
   },
   admin: {
     title: "Edit the catalogue",
