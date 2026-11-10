@@ -54,6 +54,10 @@ function bucket(): BookBucket | undefined {
   return (env as unknown as { BOOK_FILES?: BookBucket }).BOOK_FILES;
 }
 
+export function hasBookBucket(): boolean {
+  return Boolean(bucket());
+}
+
 export function bookKey(path: string): string {
   return `${BOOKS_PREFIX}/${path.replace(/^\/+/, "")}`;
 }

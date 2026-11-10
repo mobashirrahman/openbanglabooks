@@ -2,7 +2,7 @@ import { connection } from "next/server";
 import { cacheLife, cacheTag } from "next/cache";
 import { createClient } from "@supabase/supabase-js";
 import { CATALOG_TAG } from "@/lib/catalog/queries";
-import { getBookFile } from "@/lib/storage";
+import { getBookFile, hasBookBucket } from "@/lib/storage";
 
 /**
  * Serves a published EPUB from the same origin, so the reader's strict CSP
@@ -32,6 +32,7 @@ export async function GET(_request: Request, { params }: RouteContext<"/api/book
 
   // R2 first; fall back to the old Supabase bucket while files are migrated.
   const object = await getBookFile(path);
+  const debugHeaders = { "X-R2-Binding": hasBookBucket() ? "yes" : "no", "X-R2": object ? "hit" : "miss" };
   if (object) {
     return new Response(object.body, {
       headers: {
@@ -40,6 +41,7 @@ export async function GET(_request: Request, { params }: RouteContext<"/api/book
         "X-Content-Type-Options": "nosniff",
         "Content-Disposition": `inline; filename="${sha.slice(0, 12)}.epub"`,
         ...(object.httpEtag ? { ETag: object.httpEtag } : {}),
+        ...debugHeaders,
       },
     });
   }
@@ -47,7 +49,7 @@ export async function GET(_request: Request, { params }: RouteContext<"/api/book
   const upstream = await fetch(
     `${process.env.NEXT_PUBLIC_SUPABASE_URL}/storage/v1/object/public/books/${encodeURIComponent(path)}`,
   );
-  if (!upstream.ok || !upstream.body) return new Response("Unavailable", { status: 502 });
+  if (!upstream.ok || !upstream.body) return new Response("Unavailable", { status: 502, headers: debugHeaders });
   return new Response(upstream.body, {
     headers: {
       "Content-Type": "application/epub+zip",

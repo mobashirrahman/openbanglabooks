@@ -2,12 +2,13 @@
  * Import curated EPUBs (from `book-curate`) into the catalog.
  *
  *   pnpm exec tsx scripts/import-curated.ts --dir ../book-scrapper/data/telegram/bongboi/curated --dry
- *   pnpm exec tsx scripts/import-curated.ts --dir ... --limit 20
+ *   pnpm exec tsx scripts/import-curated.ts --dir ... --jobs 6
  *
  * Each `<sha256>.epub` needs its `<sha256>.json` sidecar from the curator.
  * Books are published, deduped by content hash, and uploaded to R2 under the
  * usual `books/<sha>.epub` key. Classification is intentionally conservative:
- * works import as `novel` until an editor reclassifies them.
+ * works import as `novel` until an editor reclassifies them. Writes go to the
+ * production project unless --local is passed.
  */
 import { createHash } from "node:crypto";
 import { existsSync, readFileSync, readdirSync } from "node:fs";
@@ -19,7 +20,6 @@ import { assertStorageRoom, bucketUsage, uploadBook } from "./lib/r2.ts";
 
 const root = resolve(import.meta.dirname, "..");
 
-// Explicit args first: --local writes to the local stack, the default is production.
 const preArgs = process.argv.slice(2);
 const useLocal = preArgs.includes("--local");
 const envFile = useLocal
@@ -50,6 +50,7 @@ const { values: args } = parseArgs({
     dir: { type: "string" },
     limit: { type: "string" },
     only: { type: "string" },
+    jobs: { type: "string" },
     dry: { type: "boolean", default: false },
     force: { type: "boolean", default: false },
     local: { type: "boolean", default: false },
@@ -60,9 +61,10 @@ if (!args.dir) {
   process.exit(2);
 }
 
-console.log(`target: ${process.env.NEXT_PUBLIC_SUPABASE_URL} (${envFile})`);
+console.log(`target: ${url} (${envFile})`);
 const dir = resolve(args.dir);
 const limit = args.limit ? Number(args.limit) : undefined;
+const jobs = args.dry ? 1 : Math.max(1, Number(args.jobs ?? 6));
 const sidecars = readdirSync(dir)
   .filter((name) => name.endsWith(".json"))
   .sort()
@@ -82,13 +84,24 @@ function slugFor(prefix: string, value: string): string {
   return `${prefix}-${createHash("sha1").update(value).digest("hex").slice(0, 10)}`;
 }
 
-const usedAtStart = args.dry ? 0 : bucketUsage();
-let storedBytes = usedAtStart;
+/** Fallback for sidecars whose OPF had no creator: "Author - Title.epub". */
+function authorFromSource(source: string): string | null {
+  const stem = source
+    .replace(/\.epub$/i, "")
+    .replace(/^@\w+\s+/i, "")
+    .replace(/^\d+[_\-. ]+/, "");
+  const parts = stem.split(/\s+-\s+/);
+  if (parts.length > 1 && parts[0].trim().length >= 3) return parts[0].trim();
+  return null;
+}
+
+let usedAtStart = 0;
+let storedBytes = 0;
 let imported = 0;
 let skipped = 0;
 let failed = 0;
 
-for (const name of sidecars) {
+async function importOne(name: string): Promise<void> {
   const sidecarPath = join(dir, name);
   let sidecar: Sidecar;
   try {
@@ -96,14 +109,14 @@ for (const name of sidecars) {
   } catch (error) {
     console.error(`✗ ${name}: bad sidecar: ${String(error)}`);
     failed += 1;
-    continue;
+    return;
   }
   const title = sidecar.title?.trim();
-  const author = sidecar.author?.trim();
+  const author = sidecar.author?.trim() || authorFromSource(sidecar.source);
   if (!title || !author) {
     console.error(`✗ ${sidecar.source}: missing title/author in sidecar`);
     failed += 1;
-    continue;
+    return;
   }
 
   const epubPath = join(dir, `${sidecar.output_sha256}.epub`);
@@ -113,26 +126,26 @@ for (const name of sidecars) {
   } catch {
     console.error(`✗ ${sidecar.source}: missing ${sidecar.output_sha256}.epub`);
     failed += 1;
-    continue;
+    return;
   }
   const sha256 = createHash("sha256").update(bytes).digest("hex");
   if (sha256 !== sidecar.output_sha256) {
     console.error(`✗ ${sidecar.source}: hash mismatch (${sha256.slice(0, 10)} != ${sidecar.output_sha256.slice(0, 10)})`);
     failed += 1;
-    continue;
+    return;
   }
   const report = validateEpub(bytes);
   if (!report.ok) {
     console.error(`✗ ${sidecar.source}: invalid EPUB – ${report.errors.join("; ")}`);
     failed += 1;
-    continue;
+    return;
   }
 
   if (!args.dry) {
     const { data: existing } = await supabase.from("book_files").select("id").eq("sha256", sha256).maybeSingle();
     if (existing && !args.force) {
       skipped += 1;
-      continue;
+      return;
     }
   }
 
@@ -143,7 +156,7 @@ for (const name of sidecars) {
   if (args.dry) {
     console.log(`would import ${workSlug}: ${title} — ${author} (${(bytes.byteLength / 1024).toFixed(0)} KB)`);
     imported += 1;
-    continue;
+    return;
   }
 
   try {
@@ -154,19 +167,21 @@ for (const name of sidecars) {
       .single();
     if (authorError) throw new Error(`author: ${authorError.message}`);
 
-    const workRow = {
-      slug: workSlug,
-      title_bn: title,
-      title_en: title,
-      title_latn: title,
-      form: "novel" as const,
-      status: "published" as const,
-      description_bn: null,
-      description_en: null,
-    };
     const { data: work, error: workError } = await supabase
       .from("works")
-      .upsert(workRow, { onConflict: "slug" })
+      .upsert(
+        {
+          slug: workSlug,
+          title_bn: title,
+          title_en: title,
+          title_latn: title,
+          form: "novel" as const,
+          status: "published" as const,
+          description_bn: null,
+          description_en: null,
+        },
+        { onConflict: "slug" },
+      )
       .select("id")
       .single();
     if (workError) throw new Error(`work: ${workError.message}`);
@@ -205,7 +220,7 @@ for (const name of sidecars) {
       : await supabase.from("editions").insert(editionRow).select("id").single();
     if (editionError || !edition) throw new Error(`edition: ${editionError?.message ?? "no row"}`);
 
-    assertStorageRoom(storedBytes, bytes.byteLength);
+    assertStorageRoom(usedAtStart + storedBytes, bytes.byteLength);
     uploadBook(`${sha256}.epub`, bytes);
     storedBytes += bytes.byteLength;
 
@@ -233,6 +248,19 @@ for (const name of sidecars) {
   }
 }
 
+usedAtStart = args.dry ? 0 : bucketUsage();
+
+const queue = [...sidecars];
+await Promise.all(
+  Array.from({ length: jobs }, async () => {
+    for (;;) {
+      const name = queue.shift();
+      if (!name) return;
+      await importOne(name);
+    }
+  }),
+);
+
 if (!args.dry && imported > 0) {
   const site = process.env.NEXT_PUBLIC_SITE_URL;
   const secret = process.env.REVALIDATE_SECRET;
@@ -248,5 +276,5 @@ if (!args.dry && imported > 0) {
 
 console.log(
   `\nimported ${imported}, skipped ${skipped}, failed ${failed}` +
-    (args.dry ? " (dry run)" : `; R2 ${((storedBytes - usedAtStart) / 1024 / 1024).toFixed(1)} MiB added`),
+    (args.dry ? " (dry run)" : `; R2 ${(storedBytes / 1024 / 1024).toFixed(1)} MiB added`),
 );
