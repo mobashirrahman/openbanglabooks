@@ -53,7 +53,7 @@ pnpm exec tsx scripts/migrate-r2.ts
 
 R2 has no native bucket quota, so uploads are guarded in code: the Worker checks
 the bucket before writing, and the scripts check before each upload, refusing to
-cross **9 GiB** (the free plan covers 10 GB-month). `pnpm storage:usage` prints
+cross **9.9 GB** (the free plan covers 10 GB-month). `pnpm storage:usage` prints
 the current figure. Only changes made outside the app (dashboard uploads) bypass
 the guard.
 

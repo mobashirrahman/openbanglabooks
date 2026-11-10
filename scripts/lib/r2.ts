@@ -22,8 +22,8 @@ const CONTENT_TYPES: Record<string, string> = {
   ".webp": "image/webp",
 };
 
-/** Keep the account on the R2 free tier (10 GB-month). */
-export const R2_STORAGE_LIMIT_BYTES = 9 * 1024 ** 3;
+/** Keep the account on the R2 free tier (10 GB-month): 9.9 GB decimal. */
+export const R2_STORAGE_LIMIT_BYTES = 9_900_000_000;
 
 /** Lists one page of objects. cf writes its pagination header to stderr, so
  * stdout is just the JSON array; we page by key to avoid parsing that header. */
@@ -49,9 +49,9 @@ export function bucketUsage(): number {
 export function assertStorageRoom(usedBytes: number, incomingBytes: number): void {
   if (usedBytes + incomingBytes > R2_STORAGE_LIMIT_BYTES) {
     throw new Error(
-      `R2 free-tier guard: ${(usedBytes / 1024 ** 3).toFixed(2)} GiB used + ` +
-        `${(incomingBytes / 1024 ** 3).toFixed(2)} GiB new > ` +
-        `${(R2_STORAGE_LIMIT_BYTES / 1024 ** 3)} GiB limit; refusing upload`,
+      `R2 free-tier guard: ${(usedBytes / 1000 ** 3).toFixed(2)} GB used + ` +
+        `${(incomingBytes / 1000 ** 3).toFixed(2)} GB new > ` +
+        `${(R2_STORAGE_LIMIT_BYTES / 1000 ** 3).toFixed(1)} GB limit; refusing upload`,
     );
   }
 }

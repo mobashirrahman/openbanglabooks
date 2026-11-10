@@ -25,17 +25,17 @@ type BookBucket = {
 };
 
 /**
- * Hard ceiling for everything we put in R2. The free plan covers 10 GB-month,
- * so stop well before it: 9 GiB leaves room for measurement/rounding and for
+ * Hard ceiling for everything we put in R2. The free plan covers 10 GB-month;
+ * this is 9.9 GB (decimal), leaving 100 MB of headroom for rounding and for
  * objects created outside this guard (e.g. a manual dashboard upload).
  */
-export const R2_STORAGE_LIMIT_BYTES = 9 * 1024 ** 3;
+export const R2_STORAGE_LIMIT_BYTES = 9_900_000_000;
 
 export class StorageQuotaError extends Error {
   constructor(used: number, incoming: number) {
     super(
-      `R2 storage quota reached: ${(used / 1024 ** 3).toFixed(2)} GiB used, ` +
-        `${(incoming / 1024 ** 3).toFixed(2)} GiB requested, limit ${(R2_STORAGE_LIMIT_BYTES / 1024 ** 3)} GiB`,
+      `R2 storage quota reached: ${(used / 1000 ** 3).toFixed(2)} GB used, ` +
+        `${(incoming / 1000 ** 3).toFixed(2)} GB requested, limit ${(R2_STORAGE_LIMIT_BYTES / 1000 ** 3).toFixed(1)} GB`,
     );
     this.name = "StorageQuotaError";
   }
