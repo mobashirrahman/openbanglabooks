@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from pdf2epub.pdfcraft import (
+    _Asset,
     _Block,
     _Chapter,
     _Paragraph,
@@ -63,6 +64,27 @@ def test_splits_front_matter_at_first_chapter_marker():
     assert [part.id for part in parts] == [None, 1]
     assert _plain_text(parts[1].layouts[0].blocks[0].content) == "এক"
     assert _plain_text(parts[0].layouts[0].blocks[0].content) == "প্রকাশক"
+
+
+def test_front_matter_moves_early_page_assets():
+    asset = lambda page: _Asset(
+        ref="image", page=page, det=(0, 0, 10, 10), title=[], content=[], caption=[], hash=None
+    )
+    chapter = _Chapter(
+        id=3,
+        level=0,
+        layouts=[
+            _Paragraph(ref="title", level=1, blocks=[block(3, 0, "এক")]),
+            _Paragraph(ref="text", level=-1, blocks=[block(3, 1, "পাঠ।")]),
+            asset(1),
+            asset(2),
+        ],
+    )
+    parts = _split_front_matter([chapter])
+
+    assert [part.id for part in parts] == [None, 3]
+    assert [item.page for item in parts[0].layouts if isinstance(item, _Asset)] == [1, 2]
+    assert not [item for item in parts[1].layouts if isinstance(item, _Asset)]
 
 
 def test_front_matter_split_leaves_markerless_chapter_alone():

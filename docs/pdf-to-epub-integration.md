@@ -159,6 +159,17 @@ Verified on Nishkriti with `--cover-page 2`: the bundle records
 build uses it. The automatic page-1 cover remains the default. 30 `pdf2epub`
 tests and `pnpm typecheck` pass.
 
+## Step 7 — front-matter page images (implemented)
+
+Page images that pdf-craft ordered after the chapter heading but whose source
+page is before the chapter marker now move into the front section. The body
+chapter therefore reports its real start page and does not own cover/publisher
+page images.
+
+Verified on Nishkriti 12 pages: front pages 1–2 (50 words), body `এক` pages
+3–12 (2147 words), four sections, nav front + `এক`. 31 `pdf2epub` tests and
+`pnpm typecheck` pass.
+
 ## Next planned steps
 
 1. **Structure:** make `recover_structure` the default only where it demonstrably

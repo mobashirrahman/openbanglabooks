@@ -750,15 +750,31 @@ def _split_front_matter(chapters: list[_Chapter]) -> list[_Chapter]:
             ):
                 marker = index
                 break
-        if marker is None or marker == 0:
+        if marker is None:
             out.append(chapter)
             continue
-        out.append(_Chapter(id=None, level=-1, layouts=chapter.layouts[:marker]))
+        marker_layout = chapter.layouts[marker]
+        marker_page = min(
+            (block.page for block in marker_layout.blocks), default=0
+        ) if isinstance(marker_layout, _Paragraph) else marker_layout.page
+        head_layouts = list(chapter.layouts[:marker])
+        body_layouts: list[Layout] = []
+        for layout in chapter.layouts[marker:]:
+            # Page images from the title/publisher pages are front matter too,
+            # even when pdf-craft ordered the asset after the chapter heading.
+            if isinstance(layout, _Asset) and layout.page < marker_page:
+                head_layouts.append(layout)
+            else:
+                body_layouts.append(layout)
+        if not head_layouts:
+            out.append(chapter)
+            continue
+        out.append(_Chapter(id=None, level=-1, layouts=head_layouts))
         out.append(
             _Chapter(
                 id=chapter.id,
                 level=chapter.level,
-                layouts=chapter.layouts[marker:],
+                layouts=body_layouts,
                 references=chapter.references,
             )
         )
