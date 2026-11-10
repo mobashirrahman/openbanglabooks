@@ -2,6 +2,7 @@ import { connection } from "next/server";
 import { cacheLife, cacheTag } from "next/cache";
 import { createClient } from "@supabase/supabase-js";
 import { CATALOG_TAG } from "@/lib/catalog/queries";
+import { getBookFile } from "@/lib/storage";
 
 /**
  * Serves a published EPUB from the same origin, so the reader's strict CSP
@@ -28,6 +29,20 @@ export async function GET(_request: Request, { params }: RouteContext<"/api/book
   if (!SHA.test(sha)) return new Response("Not found", { status: 404 });
   const path = await storagePathFor(sha);
   if (!path) return new Response("Not found", { status: 404 });
+
+  // R2 first; fall back to the old Supabase bucket while files are migrated.
+  const object = await getBookFile(path);
+  if (object) {
+    return new Response(object.body, {
+      headers: {
+        "Content-Type": "application/epub+zip",
+        "Cache-Control": "public, max-age=31536000, immutable",
+        "X-Content-Type-Options": "nosniff",
+        "Content-Disposition": `inline; filename="${sha.slice(0, 12)}.epub"`,
+        ...(object.httpEtag ? { ETag: object.httpEtag } : {}),
+      },
+    });
+  }
 
   const upstream = await fetch(
     `${process.env.NEXT_PUBLIC_SUPABASE_URL}/storage/v1/object/public/books/${encodeURIComponent(path)}`,

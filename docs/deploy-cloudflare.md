@@ -1,7 +1,8 @@
 # Deploying on Cloudflare Workers (vinext)
 
-Production runs on Cloudflare Workers with [vinext](https://github.com/cloudflare/vinext)
-and Supabase Cloud for the database, auth and EPUB storage. This is the
+Production runs on Cloudflare Workers with [vinext](https://github.com/cloudflare/vinext).
+Postgres, auth and private personal uploads live in Supabase Cloud; public
+catalog blobs (EPUBs and covers) live in Cloudflare R2. This is the
 deployment used by `openbanglabooks.com`.
 
 The `vinext` branch carries the Cloudflare setup. `main` still builds the
@@ -26,6 +27,35 @@ psql "$SUPABASE_DB_URL" -f supabase/seed.sql
 The web server only needs `NEXT_PUBLIC_SUPABASE_URL` and
 `NEXT_PUBLIC_SUPABASE_ANON_KEY`; `SUPABASE_SERVICE_ROLE_KEY` is only for
 ingestion and publishing (`pnpm ingest`, `pnpm pdf:publish`).
+
+## 1b. R2 (public book files)
+
+R2 must be enabled once for the account in the Cloudflare dashboard. Then
+create the bucket and its public hostname:
+
+```bash
+cf r2 buckets create --name openbanglabooks-files --location-hint apac
+cf r2 buckets domains custom create files.openbanglabooks.com \
+  --bucket-name openbanglabooks-files --zone-id <openbanglabooks.com zone id>
+```
+
+The Worker binds it as `BOOK_FILES` (`cloudflare.config.ts`). Keys are
+`books/<sha256>.epub` and `covers/<sha256>.<ext>`, which are exactly the
+`book_files.storage_path` values, so the catalog does not change.
+
+Copy existing Supabase objects once (needs `SUPABASE_SERVICE_ROLE_KEY` and an
+authenticated `cf` CLI):
+
+```bash
+pnpm exec tsx scripts/migrate-r2.ts --dry
+pnpm exec tsx scripts/migrate-r2.ts
+```
+
+`pnpm ingest` and `pnpm pdf:publish` upload to R2 through `cf r2 objects put`;
+set `R2_BUCKET` to use a different bucket name. The reader streams
+`/api/books/<sha>` from the `BOOK_FILES` binding and falls back to Supabase for
+any object not migrated yet. `personal-books` stays in Supabase: those uploads
+are private and rely on storage RLS.
 
 ## 2. Environment
 

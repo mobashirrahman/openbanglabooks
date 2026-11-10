@@ -10,6 +10,7 @@ import { existsSync, readFileSync } from "node:fs";
 import { basename, resolve } from "node:path";
 import { parseArgs } from "node:util";
 import { createClient } from "@supabase/supabase-js";
+import { uploadBook } from "../lib/r2.ts";
 
 const root = resolve(import.meta.dirname, "../..");
 
@@ -97,14 +98,7 @@ const sha256 = createHash("sha256").update(bytes).digest("hex");
 const storagePath = `${sha256}.epub`;
 const supabase = createClient(url, key, { auth: { persistSession: false, autoRefreshToken: false } });
 
-const { error: uploadError } = await supabase.storage
-  .from("books")
-  .upload(storagePath, bytes, {
-    contentType: "application/epub+zip",
-    upsert: true,
-    cacheControl: "31536000",
-  });
-if (uploadError) fail(`upload: ${uploadError.message}`);
+uploadBook(storagePath, bytes);
 
 const author = await one(
   "author",

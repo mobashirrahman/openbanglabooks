@@ -11,6 +11,7 @@ import { parseArgs } from "node:util";
 import YAML from "yaml";
 import { createClient } from "@supabase/supabase-js";
 import { validateEpub } from "../../src/lib/epub/validate.ts";
+import { uploadBook } from "../lib/r2.ts";
 import { toAsciiDigits } from "../../src/lib/i18n/format.ts";
 import { resolveSource, qualitySummary, type SourceSpec } from "./sources.ts";
 import { cleanChapter } from "./clean.ts";
@@ -209,10 +210,7 @@ async function main() {
 
     // 4. upload (content-addressed, so re-uploads are idempotent)
     const path = `${sha256}.epub`;
-    const { error: upErr } = await supabase.storage
-      .from("books")
-      .upload(path, bytes, { contentType: "application/epub+zip", upsert: true, cacheControl: "31536000" });
-    if (upErr) throw new Error(`upload ${w.slug}: ${upErr.message}`);
+    uploadBook(path, bytes);
 
     // 5. catalog rows
     const work = await upsert(

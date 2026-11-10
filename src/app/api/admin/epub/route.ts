@@ -5,6 +5,7 @@ import { AdminError, requireEditor } from "@/lib/admin/auth";
 import { CATALOG_TAG } from "@/lib/catalog/queries";
 import { LIMITS, validateEpub } from "@/lib/epub/validate";
 import { countChapters, readToc } from "@/lib/epub/toc";
+import { putBookFile } from "@/lib/storage";
 
 /**
  * POST /api/admin/epub?edition=<uuid>, body: the EPUB file.
@@ -75,11 +76,10 @@ export async function POST(request: NextRequest) {
   const toc = readToc(bytes);
   const { supabase } = editor;
 
-  const { error: upErr } = await supabase.storage
-    .from("books")
-    .upload(`${sha}.epub`, bytes, { contentType: "application/epub+zip", upsert: true, cacheControl: "31536000" });
-  if (upErr) {
-    console.error("epub upload", upErr);
+  try {
+    await putBookFile(`${sha}.epub`, bytes);
+  } catch (error) {
+    console.error("epub upload", error);
     return fail(502, "storage");
   }
 
