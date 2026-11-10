@@ -35,10 +35,6 @@ function loadEnv(): Record<string, string> {
 const env = loadEnv();
 const url = env.NEXT_PUBLIC_SUPABASE_URL;
 const key = env.SUPABASE_SERVICE_ROLE_KEY;
-if (!url || !key) {
-  console.error("error: NEXT_PUBLIC_SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY are required in .env.local");
-  process.exit(2);
-}
 
 const { values: args } = parseArgs({
   args: process.argv.slice(2).filter((value) => value !== "--"),
@@ -60,6 +56,8 @@ const { values: args } = parseArgs({
     rights: { type: "string" },
     description: { type: "string" },
     "featured-rank": { type: "string" },
+    publication: { type: "string" },
+    "dry-run": { type: "boolean", default: false },
     json: { type: "boolean", default: false },
   },
 });
@@ -93,9 +91,51 @@ if (!["novel", "short-stories", "poetry", "essays", "drama"].includes(form)) {
   process.exit(2);
 }
 
+const publicationPath = args.publication
+  ? resolve(args.publication)
+  : existsSync(`${epubPath}.publication.json`)
+    ? `${epubPath}.publication.json`
+    : args.bundle && existsSync(resolve(args.bundle, "publication.json"))
+      ? resolve(args.bundle, "publication.json")
+      : null;
+const publication = publicationPath ? JSON.parse(readFileSync(publicationPath, "utf8")) : null;
+
 const bytes = new Uint8Array(readFileSync(epubPath));
 const sha256 = createHash("sha256").update(bytes).digest("hex");
 const storagePath = `${sha256}.epub`;
+
+if (args["dry-run"]) {
+  console.log(
+    JSON.stringify(
+      {
+        dryRun: true,
+        slug,
+        title: titleBn,
+        author: authorBn,
+        sha256,
+        bytes: bytes.byteLength,
+        storagePath,
+        publication: publication
+          ? {
+              path: publicationPath,
+              validation: publication.validation,
+              warnings: publication.warnings,
+              source: publication.source,
+              pipeline: publication.pipeline,
+            }
+          : null,
+      },
+      null,
+      2,
+    ),
+  );
+  process.exit(0);
+}
+
+if (!url || !key) {
+  console.error("error: NEXT_PUBLIC_SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY are required in .env.local");
+  process.exit(2);
+}
 const supabase = createClient(url, key, { auth: { persistSession: false, autoRefreshToken: false } });
 
 assertStorageRoom(bucketUsage(), bytes.byteLength);
@@ -176,14 +216,27 @@ const editionRow = {
   work_id: work.id,
   label_bn: "লোকাল স্ক্যান",
   label_en: "Local scan",
-  publisher: meta.publisher ?? null,
-  pub_year: meta.firstPublished ?? null,
-  source_name: args["source-name"] ?? meta.sourceName ?? basename(epubPath),
-  source_url: args["source-url"] ?? meta.sourceUrl ?? "",
-  source_revisions: {},
-  license: "Local test import",
-  license_url: null,
-  attribution: "Local OCR test import; not for redistribution.",
+  publisher: meta.publisher ?? publication?.metadata?.publisher ?? null,
+  pub_year: meta.firstPublished ?? publication?.metadata?.firstPublished ?? null,
+  source_name:
+    args["source-name"] ?? meta.sourceName ?? publication?.metadata?.sourceName ?? basename(epubPath),
+  source_url: args["source-url"] ?? meta.sourceUrl ?? publication?.metadata?.sourceUrl ?? "",
+  source_revisions: publication
+    ? {
+        publication: {
+          format: publication.format,
+          version: publication.version,
+          sha256: publication.epub?.sha256,
+          modified: publication.metadata?.modified,
+          source: publication.source,
+          pipeline: publication.pipeline,
+        },
+      }
+    : {},
+  license: publication?.metadata?.license ?? "Local test import",
+  license_url: publication?.metadata?.licenseUrl ?? null,
+  attribution:
+    publication?.metadata?.rights ?? "Local OCR test import; not for redistribution.",
   toc,
   excerpt_bn: excerpt,
   chapter_count: chapterCount,
@@ -212,7 +265,7 @@ const { error: fileError } = await supabase.from("book_files").upsert(
     sha256,
     bytes: bytes.byteLength,
     epub_version: "3.0",
-    validation_report: {},
+    validation_report: publication?.validation ?? {},
     is_current: true,
   },
   { onConflict: "sha256" },

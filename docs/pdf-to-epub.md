@@ -343,6 +343,32 @@ scripts, event handlers, inline styles or remote resources. It then checks every
 local link, image reference, TOC target, page-list entry and anchor before
 writing the file.
 
+## Publication provenance and QA
+
+Every build writes a deterministic `publication.json` in the work bundle and
+next to the EPUB (`book.epub.publication.json`). It records:
+
+- EPUB filename, SHA-256 and byte size;
+- source PDF SHA-256, page count and byte size;
+- OCR pipeline/version/model and DPI;
+- resolved title/author/publisher/date/rights/licence/subjects;
+- section, chapter, TOC, page-list and word counts; cover source;
+- the internal EPUB validation report, warnings, and optional EPUBCheck status.
+
+`pnpm pdf:build --epubcheck /path/to/epubcheck.jar` runs EPUBCheck as a gate
+(Java required) and records its result in `publication.json` and
+`epubcheck.txt`.
+
+`pnpm pdf:publish` reads the sidecar (or `--publication path`) and stores its
+validation report and revision metadata in `book_files.validation_report` and
+`editions.source_revisions` instead of writing `{}`. Preview the publish
+payload without touching Supabase or R2:
+
+```bash
+pnpm pdf:publish -- --epub dist/book.epub --bundle .work/pdf/book \
+  --slug my-book --title-bn "বই" --author-bn "লেখক" --dry-run
+```
+
 ## Limits and review checklist
 
 Heuristics are good, not magic. Before publishing, spot-check:

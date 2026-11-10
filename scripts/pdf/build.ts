@@ -5,6 +5,7 @@
  * the same whitelist used by the rest of the site, assembles an EPUB 3.3 file,
  * and runs the site's structural validator before writing it.
  */
+import { spawnSync } from "node:child_process";
 import { createHash } from "node:crypto";
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { basename, dirname, join, resolve } from "node:path";
@@ -72,6 +73,7 @@ const { values: args } = parseArgs({
     subtitle: { type: "string" },
     cover: { type: "string", default: "auto" },
     "no-fonts": { type: "boolean", default: false },
+    epubcheck: { type: "string" },
     json: { type: "boolean", default: false },
   },
 });
@@ -248,6 +250,66 @@ if (!report.ok) {
 
 mkdirSync(dirname(out), { recursive: true });
 writeFileSync(out, result.bytes);
+
+let epubcheck: { status: "passed" | "failed" | "not-run"; output?: string } = { status: "not-run" };
+if (args.epubcheck) {
+  const jar = resolve(args.epubcheck);
+  const run = spawnSync("java", ["-jar", jar, out], { encoding: "utf8" });
+  if (run.error) {
+    console.error(`error: could not run EPUBCheck: ${run.error.message}`);
+    process.exit(1);
+  }
+  const output = `${run.stdout ?? ""}${run.stderr ?? ""}`.trim();
+  epubcheck = { status: run.status === 0 ? "passed" : "failed", output: output.slice(-8000) };
+  writeFileSync(join(work, "epubcheck.txt"), output + "\n", "utf8");
+  if (run.status !== 0) {
+    console.error("EPUBCheck failed; see epubcheck.txt");
+    process.exit(1);
+  }
+}
+
+const publication = {
+  format: "openbanglabooks-publication",
+  version: 1,
+  epub: { file: basename(out), sha256: result.sha256, bytes: result.bytes.byteLength },
+  source: bundle.source,
+  pipeline: bundle.pipeline,
+  metadata: {
+    identifier: meta.identifier,
+    title: meta.title,
+    titleEn: meta.titleEn,
+    subtitle: meta.subtitle,
+    author: meta.author,
+    authorEn: meta.authorEn,
+    authorSort: meta.authorSort,
+    language: meta.language,
+    publisher: meta.publisher,
+    firstPublished: meta.firstPublished,
+    sourceName: meta.sourceName,
+    sourceUrl: meta.sourceUrl,
+    rights: meta.rights,
+    license: meta.license,
+    licenseUrl: meta.licenseUrl,
+    description: meta.description,
+    subjects: meta.subjects ?? [],
+    modified: meta.modified,
+    ocrModel: meta.ocrModel,
+  },
+  structure: {
+    sections: bundle.sections.length,
+    chapters: bundle.sections.filter((section) => section.epubType === "chapter").length,
+    toc: bundle.toc.length,
+    pageList: bundle.pageList?.length ?? 0,
+    words: Number(bundle.report?.stats?.words ?? 0),
+    cover: bundle.cover,
+  },
+  validation: { ...report, epubcheck },
+  warnings: [...report.warnings, ...(bundle.report?.warnings ?? [])],
+};
+const publicationJson = JSON.stringify(publication, null, 2) + "\n";
+writeFileSync(join(work, "publication.json"), publicationJson, "utf8");
+writeFileSync(`${out}.publication.json`, publicationJson, "utf8");
+
 const sidecar = `${out}.report.json`;
 writeFileSync(
   sidecar,
@@ -269,7 +331,7 @@ writeFileSync(
 );
 
 if (args.json) {
-  console.log(JSON.stringify({ out, sha256: result.sha256, bytes: result.bytes.byteLength, warnings: report.warnings }, null, 2));
+  console.log(JSON.stringify({ out, sha256: result.sha256, bytes: result.bytes.byteLength, publication: join(work, "publication.json"), warnings: report.warnings }, null, 2));
 } else {
   console.log(`EPUB: ${out}`);
   console.log(`  sha256: ${result.sha256}`);
@@ -277,7 +339,8 @@ if (args.json) {
   console.log(`  title:  ${report.title ?? "?"} (${report.language ?? "?"})`);
   console.log(`  files:  ${report.entries}`);
   for (const warning of report.warnings) console.log(`  warning: ${warning}`);
-  console.log(`  report: ${sidecar}`);
+  console.log(`  report:      ${sidecar}`);
+  console.log(`  publication: ${join(work, "publication.json")}`);
 }
 
 function stripCoverImages(xhtml: string, coverFiles: Set<string>): string {

@@ -116,6 +116,21 @@ Verification on Nishkriti pages 1–5 with `qwen3.5:4b-q4_K_M`:
 This step is committed as code + docs; the 5-page proofread run is a safety and
 wiring check, not an accuracy claim.
 
+## Step 4 — publication provenance and QA (implemented)
+
+`pdf:build` now writes `publication.json` in the bundle and next to the EPUB.
+It captures source/OCR/metadata/structure/validation data and can run an
+optional EPUBCheck gate (`--epubcheck`, Java required).
+
+`pdf:publish` reads that sidecar automatically (or `--publication`) and stores
+its validation report and revision metadata instead of `{}`. `--dry-run`
+prints the payload without touching Supabase or R2.
+
+Verified on the Nishkriti build: the sidecar records source SHA-256/pages,
+OCR model, title/author/publisher, section/chapter/TOC/page-list counts and the
+internal validation report. `pnpm typecheck` and the EPUB unit tests pass.
+EPUBCheck is wired but not run here because Java is not installed on this host.
+
 ## Next planned steps
 
 1. **Structure:** make `recover_structure` the default only where it demonstrably
