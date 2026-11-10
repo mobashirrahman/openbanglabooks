@@ -586,6 +586,8 @@ const bn = {
     sources: "উৎস ও স্বত্ব",
     sourcesBody: "পাঠ: বাংলা উইকিসংকলন (CC BY-SA)। প্রচ্ছদ: OpenBanglaBooks-এর নিজস্ব নকশা।",
     rightsPolicy: "কোন বই এখানে থাকে",
+    dataDeletion: "তথ্য মুছে ফেলা",
+    dataDeletionContact: "যোগাযোগ করুন",
   },
   admin: {
     title: "ক্যাটালগ সম্পাদনা",

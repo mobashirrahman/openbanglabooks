@@ -32,6 +32,11 @@ export function SiteFooter({ locale, dict }: { locale: Locale; dict: Dictionary 
                 {dict.footer.rightsPolicy}
               </Link>
             </li>
+            <li>
+              <Link className="text-fg-muted hover:text-fg hover:underline" href={href("/data-deletion")}>
+                {dict.footer.dataDeletion}
+              </Link>
+            </li>
           </ul>
         </nav>
         <div className="text-sm">

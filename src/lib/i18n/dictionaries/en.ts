@@ -589,6 +589,8 @@ const en: Dictionary = {
     sources: "Sources and rights",
     sourcesBody: "Texts: Bengali Wikisource (CC BY-SA). Covers: original OpenBanglaBooks designs.",
     rightsPolicy: "What we publish",
+    dataDeletion: "Delete your data",
+    dataDeletionContact: "Contact us",
   },
   admin: {
     title: "Edit the catalogue",

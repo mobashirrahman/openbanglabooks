@@ -8,7 +8,7 @@ import { clearLocalData, expectNoSeriousViolations, viewportOf } from "./helpers
  * so each page is checked once it has settled.
  */
 
-const PAGES = ["/library", "/library/goodreads", "/library/hardcover", "/notes", "/profile", "/offline", "/signin", "/search?q=গোরা", "/en/library", "/en/profile"];
+const PAGES = ["/library", "/library/goodreads", "/library/hardcover", "/notes", "/profile", "/offline", "/signin", "/data-deletion", "/en/data-deletion", "/search?q=গোরা", "/en/library", "/en/profile"];
 
 test.describe("accessibility", () => {
   test.beforeEach(async ({ page }, info) => {

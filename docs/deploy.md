@@ -102,11 +102,14 @@ In the Supabase dashboard (or `supabase/config.toml` for self-hosting):
   shows "Continue with Google"; if the provider is not enabled the button
   reports that instead of leaving the site.
 - **Facebook:** create a Meta app with Facebook Login, add the same callback
-  URL, put its id and secret in Supabase and enable the provider.
-- **Local providers:** export `SUPABASE_AUTH_EXTERNAL_GOOGLE_CLIENT_ID`,
-  `SUPABASE_AUTH_EXTERNAL_GOOGLE_SECRET`, and the two
-  `SUPABASE_AUTH_EXTERNAL_FACEBOOK_*` equivalents before `pnpm db:start`;
-  `supabase/config.toml` reads them.
+  URL, put its id and secret in Supabase and enable the provider. In the app's
+  **Basic Settings**, set **Data Deletion Instructions URL** to
+  `https://<domain>/en/data-deletion` (the public bilingual page lives at
+  `/data-deletion` and `/en/data-deletion`).
+- **Local providers:** put the four `SUPABASE_AUTH_EXTERNAL_*` variables in a
+  gitignored `.env.supabase.local`, then run
+  `set -a; . ./.env.supabase.local; set +a; pnpm db:start`. The values are
+  read by `supabase start`, not by the web app.
 
 Nothing else changes: sync and the admin only see a user id.
 

@@ -348,7 +348,7 @@ email_optional = false
 # authorised redirect URI at the provider is
 # https://<project-ref>.supabase.co/auth/v1/callback.
 [auth.external.google]
-enabled = false
+enabled = true
 client_id = "env(SUPABASE_AUTH_EXTERNAL_GOOGLE_CLIENT_ID)"
 secret = "env(SUPABASE_AUTH_EXTERNAL_GOOGLE_SECRET)"
 redirect_uri = ""
@@ -356,7 +356,7 @@ redirect_uri = ""
 skip_nonce_check = true
 
 [auth.external.facebook]
-enabled = false
+enabled = true
 client_id = "env(SUPABASE_AUTH_EXTERNAL_FACEBOOK_CLIENT_ID)"
 secret = "env(SUPABASE_AUTH_EXTERNAL_FACEBOOK_SECRET)"
 redirect_uri = ""
