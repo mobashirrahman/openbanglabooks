@@ -121,6 +121,9 @@ type Frame = {
   flapBackground: string;
   shadeClip: string;
   shadeBackground: string;
+  /** the shadow the lifting paper throws on the part of the page still flat */
+  creaseClip: string;
+  creaseBackground: string;
 };
 
 /**
@@ -157,11 +160,23 @@ function frame(layout: CurlLayout, mirror: boolean, reversed: boolean, C: Pt, P:
     clip,
     clipOpen: `path(evenodd, "${sub_path(flat)}${sub_path(otherPage)}${sub_path(flap)}")`,
     flapClip: poly(flapOnLeaf),
-    // the back of the paper: darker in the fold's curve, a soft highlight beyond it
-    flapBackground: `${gradientAlong(box, m, n, [fx(0, 0.24), fx(14, 0.1), [70, "rgba(255,255,255,0.10)"], fx(260, 0.03)])}, ${paper}`,
+    // the back of the paper: a dark crease at the fold, a narrow specular band
+    // where the sheet rolls, then the paper's own colour with a soft falloff
+    flapBackground: `${gradientAlong(box, m, n, [
+      fx(0, 0.26),
+      [2.5, "rgba(255,255,255,0.18)"],
+      fx(9, 0.1),
+      [30, "rgba(255,255,255,0.08)"],
+      fx(80, 0.02),
+      fx(300, 0.05),
+    ])}, ${paper}`,
     shadeClip: poly(lifted),
     // the shadow the curling leaf casts on the page it uncovers
-    shadeBackground: gradientAlong(box, m, [-n[0], -n[1]], [fx(0, 0.3), fx(26, 0.12), fx(90, 0)]),
+    shadeBackground: gradientAlong(box, m, [-n[0], -n[1]], [fx(0, 0.34), fx(14, 0.16), fx(52, 0.07), fx(170, 0)]),
+    creaseClip: poly(flat),
+    // …and the shadow its still-flat part carries just before the fold (n
+    // points into the flat side, so the shading fades as the distance grows)
+    creaseBackground: gradientAlong(box, m, n, [fx(0, 0.2), fx(16, 0.09), fx(70, 0)]),
   };
 }
 
@@ -188,9 +203,12 @@ export function turnMode(): "named" | "root" | null {
   return null;
 }
 
-const ease = (t: number) => (t < 0.5 ? 4 * t * t * t : 1 - (-2 * t + 2) ** 3 / 2);
+// A page set in motion leaves quickly and settles: the corner's speed peaks
+// early, like a sheet of paper let go, instead of the symmetric ease-in-out
+// that made the timed turn feel mechanical.
+const ease = (t: number) => 1 - (1 - t) ** 4;
 
-export type CurlElements = { page: HTMLElement; flap: HTMLElement; shade: HTMLElement };
+export type CurlElements = { page: HTMLElement; flap: HTMLElement; shade: HTMLElement; crease: HTMLElement };
 
 /** Where the corner rests, and where it goes when the leaf has turned over. */
 function endpoints(layout: CurlLayout, corner: "bottom" | "top") {
@@ -207,6 +225,8 @@ export type CurlTurn = {
   moveTo(finger: Pt): void;
   /** the finger was lifted: finishes the turn if it went far or fast enough, otherwise lays the page back */
   release(): Promise<boolean>;
+  /** the gesture was interrupted (a pinch, a system gesture): always lays the page back */
+  cancel(): Promise<boolean>;
 };
 
 /**
@@ -254,16 +274,19 @@ export function startCurl(opts: {
     const f = frame(layout, mirror, reversed, mirrorX(C), mirrorX(P), paper);
     els.flap.style.background = f.flapBackground;
     els.shade.style.background = f.shadeBackground;
+    els.crease.style.background = f.creaseBackground;
     if (at) {
-      // root mode: the flap and shade are live layers above the page, seen through
+      // root mode: the paper layers are live above the page, seen through
       // holes cut in the screen snapshot (WebKit's live images miss their per-frame changes)
       els.flap.style.clipPath = f.flapClip;
       els.shade.style.clipPath = f.shadeClip;
+      els.crease.style.clipPath = f.creaseClip;
       style!.textContent = `html[data-curl]::view-transition-old(root){clip-path:${shift(f.clipOpen, at.left, at.top)}}`;
     } else {
       style!.textContent = `html[data-curl]::view-transition-${f.moving}(obb-page){clip-path:${f.clip}}
 html[data-curl]::view-transition-new(obb-flap){clip-path:${f.flapClip}}
-html[data-curl]::view-transition-new(obb-shade){clip-path:${f.shadeClip}}`;
+html[data-curl]::view-transition-new(obb-shade){clip-path:${f.shadeClip}}
+html[data-curl]::view-transition-new(obb-crease){clip-path:${f.creaseClip}}`;
     }
   };
 
@@ -271,6 +294,7 @@ html[data-curl]::view-transition-new(obb-shade){clip-path:${f.shadeClip}}`;
     els.page.style.viewTransitionName = "obb-page";
     els.flap.style.viewTransitionName = "obb-flap";
     els.shade.style.viewTransitionName = "obb-shade";
+    els.crease.style.viewTransitionName = "obb-crease";
   }
   root.dataset.curl = mode === "root" ? "root" : reversed ? "new-top" : "old-top";
   draw(from);
@@ -283,8 +307,10 @@ html[data-curl]::view-transition-new(obb-shade){clip-path:${f.shadeClip}}`;
     els.page.style.viewTransitionName = "";
     els.flap.style.viewTransitionName = "";
     els.shade.style.viewTransitionName = "";
+    els.crease.style.viewTransitionName = "";
     els.flap.style.clipPath = "";
     els.shade.style.clipPath = "";
+    els.crease.style.clipPath = "";
     delete root.dataset.curl;
     style!.textContent = "";
   };
@@ -293,7 +319,8 @@ html[data-curl]::view-transition-new(obb-shade){clip-path:${f.shadeClip}}`;
     new Promise<void>((resolve) => {
       const start = current;
       const t0 = performance.now();
-      const lift = layout.box.h * 0.14 * (corner === "bottom" ? 1 : -1);
+      // a shallow arc: the corner travels, it does not leap off the book
+      const lift = layout.box.h * 0.075 * (corner === "bottom" ? 1 : -1);
       const step = (now: number) => {
         const t = Math.min(1, (now - t0) / ms);
         const e = ease(t);
@@ -321,7 +348,7 @@ html[data-curl]::view-transition-new(obb-shade){clip-path:${f.shadeClip}}`;
     }
     const dist = Math.hypot(current[0] - (complete ? to : from)[0], current[1] - (complete ? to : from)[1]);
     const full = Math.hypot(to[0] - from[0], to[1] - from[1]);
-    await animate(complete ? to : from, Math.max(160, (opts.duration ?? 520) * (dist / full)));
+    await animate(complete ? to : from, Math.max(140, (opts.duration ?? 460) * (dist / full)));
     if (!complete) await opts.revert().catch(() => {});
     vt.skipTransition();
     await vt.finished.catch(() => {});
@@ -342,6 +369,9 @@ html[data-curl]::view-transition-new(obb-shade){clip-path:${f.shadeClip}}`;
       // forward: the corner follows the finger; backward on one page: the fold line does
       const k = reversed ? 2 : 1;
       const P: Pt = [from[0] + k * (f[0] - start[0]), from[1] + (f[1] - start[1])];
+      // remember the finger's place even before the transition is ready to draw:
+      // a very fast flick can be let go while the snapshot is still being taken
+      current = P;
       void vt.ready.then(() => !finished && draw(P)).catch(() => {});
     },
     release: () => {
@@ -354,8 +384,11 @@ html[data-curl]::view-transition-new(obb-shade){clip-path:${f.shadeClip}}`;
         const along = dot(sub(b.p, a.p), span) / Math.hypot(span[0], span[1]);
         speed = along / Math.max(1, b.t - a.t);
       }
-      return finish(progress > 0.4 || (speed > 0.35 && progress > 0.04));
+      // A finger only has to travel about a quarter of the page, or flick it
+      // with intent: needing nearly half the page made ordinary swipes fall back.
+      return finish(progress > 0.26 || (speed > 0.22 && progress > 0.02));
     },
+    cancel: () => finish(false),
   };
 }
 

@@ -17,12 +17,14 @@ export function BookFrame({
   mobile,
   fraction,
   sweep,
+  edgeButtons,
   dark,
   onEdge,
   labels,
   pageRef,
   flapRef,
   shadeRef,
+  creaseRef,
   children,
 }: {
   width: number;
@@ -32,6 +34,8 @@ export function BookFrame({
   fraction: number;
   /** the latest page turn (a new id replays the leaf shadow); null when motion is off */
   sweep: { id: number; dir: 1 | -1 } | null;
+  /** enough desk for the hover arrows to sit beside the book, not on it */
+  edgeButtons: boolean;
   dark: boolean;
   onEdge: (dir: 1 | -1) => void;
   labels: { prev: string; next: string };
@@ -39,6 +43,7 @@ export function BookFrame({
   pageRef: React.Ref<HTMLDivElement>;
   flapRef: React.Ref<HTMLDivElement>;
   shadeRef: React.Ref<HTMLDivElement>;
+  creaseRef: React.Ref<HTMLDivElement>;
   children: React.ReactNode;
 }) {
   if (!width) return null;
@@ -88,78 +93,82 @@ export function BookFrame({
           </>
         ) : null}
 
-        {/* the back of a curling leaf and the shadow it casts: painted beneath the page,
-            seen only while a page-curl transition shows them */}
-        <div ref={flapRef} data-curl-layer aria-hidden className="pointer-events-none absolute inset-0 -z-10" />
+        {/* a curling leaf's shading: the shadow its still-flat part carries at the
+            fold, the shadow on the page it uncovers, and the back of the paper.
+            Painted beneath the page; visible only while a curl transition shows them. */}
+        <div ref={creaseRef} data-curl-layer aria-hidden className="pointer-events-none absolute inset-0 -z-10" />
         <div ref={shadeRef} data-curl-layer aria-hidden className="pointer-events-none absolute inset-0 -z-10" />
+        <div ref={flapRef} data-curl-layer aria-hidden className="pointer-events-none absolute inset-0 -z-10" />
 
         {/* the page itself: everything a page curl turns over */}
         <div ref={pageRef} className={cn("absolute inset-0 overflow-hidden bg-[var(--paper)]", !mobile && "rounded-[3px]")}>
-        {children}
+          {children}
 
-        {/* gutter: the fold between facing pages */}
-        {columns === 2 ? (
-          <div
-            aria-hidden
-            className="pointer-events-none absolute inset-y-0 left-1/2 w-[9%] -translate-x-1/2"
-            style={{
-              background: dark
-                ? "linear-gradient(90deg, transparent, rgb(0 0 0 / 0.22) 46%, rgb(0 0 0 / 0.32) 50%, rgb(0 0 0 / 0.22) 54%, transparent)"
-                : "linear-gradient(90deg, transparent, rgb(60 45 25 / 0.07) 40%, rgb(60 45 25 / 0.16) 49.5%, rgb(255 255 255 / 0.25) 50.5%, rgb(60 45 25 / 0.07) 60%, transparent)",
-            }}
-          />
-        ) : null}
-        {/* a soft curvature at the outer edges of the paper */}
-        {!mobile ? (
-          <div
-            aria-hidden
-            className="pointer-events-none absolute inset-0 rounded-[3px]"
-            style={{
-              background: dark
-                ? "linear-gradient(90deg, rgb(0 0 0 / 0.18), transparent 3%, transparent 97%, rgb(0 0 0 / 0.18))"
-                : "linear-gradient(90deg, rgb(60 45 25 / 0.06), transparent 3%, transparent 97%, rgb(60 45 25 / 0.06))",
-            }}
-          />
-        ) : null}
-
-        {/* leaf shadow sweeping across the page on a turn */}
-        {sweep ? (
-          <div aria-hidden className="pointer-events-none absolute inset-0 overflow-hidden">
+          {/* gutter: the fold between facing pages */}
+          {columns === 2 ? (
             <div
-              key={sweep.id}
-              className={cn("leaf-sweep absolute inset-y-0 w-[38%]", sweep.dir === 1 ? "leaf-sweep-next" : "leaf-sweep-prev")}
+              aria-hidden
+              className="pointer-events-none absolute inset-y-0 left-1/2 w-[9%] -translate-x-1/2"
               style={{
                 background: dark
-                  ? "linear-gradient(90deg, transparent, rgb(0 0 0 / 0.28) 70%, rgb(0 0 0 / 0.05))"
-                  : "linear-gradient(90deg, transparent, rgb(60 45 25 / 0.12) 70%, rgb(255 255 255 / 0.18))",
+                  ? "linear-gradient(90deg, transparent, rgb(0 0 0 / 0.22) 46%, rgb(0 0 0 / 0.32) 50%, rgb(0 0 0 / 0.22) 54%, transparent)"
+                  : "linear-gradient(90deg, transparent, rgb(60 45 25 / 0.07) 40%, rgb(60 45 25 / 0.16) 49.5%, rgb(255 255 255 / 0.25) 50.5%, rgb(60 45 25 / 0.07) 60%, transparent)",
               }}
             />
-          </div>
-        ) : null}
+          ) : null}
+          {/* a soft curvature at the outer edges of the paper */}
+          {!mobile ? (
+            <div
+              aria-hidden
+              className="pointer-events-none absolute inset-0 rounded-[3px]"
+              style={{
+                background: dark
+                  ? "linear-gradient(90deg, rgb(0 0 0 / 0.18), transparent 3%, transparent 97%, rgb(0 0 0 / 0.18))"
+                  : "linear-gradient(90deg, rgb(60 45 25 / 0.06), transparent 3%, transparent 97%, rgb(60 45 25 / 0.06))",
+              }}
+            />
+          ) : null}
+
+          {/* leaf shadow sweeping across the page on a turn */}
+          {sweep ? (
+            <div aria-hidden className="pointer-events-none absolute inset-0 overflow-hidden">
+              <div
+                key={sweep.id}
+                className={cn("leaf-sweep absolute inset-y-0 w-[38%]", sweep.dir === 1 ? "leaf-sweep-next" : "leaf-sweep-prev")}
+                style={{
+                  background: dark
+                    ? "linear-gradient(90deg, transparent, rgb(0 0 0 / 0.28) 70%, rgb(0 0 0 / 0.05))"
+                    : "linear-gradient(90deg, transparent, rgb(60 45 25 / 0.12) 70%, rgb(255 255 255 / 0.18))",
+                }}
+              />
+            </div>
+          ) : null}
         </div>
 
-        {/* desktop page edges are buttons, too */}
-        {!mobile ? (
-          <>
-            <button
-              type="button"
-              onClick={() => onEdge(-1)}
-              aria-label={labels.prev}
-              className="group absolute inset-y-0 -left-16 flex w-14 items-center justify-center text-[var(--ink-muted)] opacity-0 transition-opacity duration-200 hover:opacity-100 focus-visible:opacity-100"
-            >
-              <ChevronLeft aria-hidden className="size-7" />
-            </button>
-            <button
-              type="button"
-              onClick={() => onEdge(1)}
-              aria-label={labels.next}
-              className="group absolute inset-y-0 -right-16 flex w-14 items-center justify-center text-[var(--ink-muted)] opacity-0 transition-opacity duration-200 hover:opacity-100 focus-visible:opacity-100"
-            >
-              <ChevronRight aria-hidden className="size-7" />
-            </button>
-          </>
-        ) : null}
       </div>
+
+      {/* desktop page edges are buttons, too: in the desk margin at the screen's
+          edge, so a wider book never pushes them off it */}
+      {!mobile && edgeButtons ? (
+        <>
+          <button
+            type="button"
+            onClick={() => onEdge(-1)}
+            aria-label={labels.prev}
+            className="absolute top-1/2 left-2 z-10 flex size-14 -translate-y-1/2 items-center justify-center rounded-full text-[var(--ink-muted)] opacity-0 transition-[opacity,background-color] duration-200 hover:bg-[color-mix(in_oklab,var(--ink)_7%,transparent)] hover:opacity-100 focus-visible:opacity-100"
+          >
+            <ChevronLeft aria-hidden className="size-7" />
+          </button>
+          <button
+            type="button"
+            onClick={() => onEdge(1)}
+            aria-label={labels.next}
+            className="absolute top-1/2 right-2 z-10 flex size-14 -translate-y-1/2 items-center justify-center rounded-full text-[var(--ink-muted)] opacity-0 transition-[opacity,background-color] duration-200 hover:bg-[color-mix(in_oklab,var(--ink)_7%,transparent)] hover:opacity-100 focus-visible:opacity-100"
+          >
+            <ChevronRight aria-hidden className="size-7" />
+          </button>
+        </>
+      ) : null}
     </div>
   );
 }

@@ -10,7 +10,13 @@ import { pickAnchor } from "./reanchor";
 import { makeLoader } from "./epub-loader";
 import { sanitizeSection } from "./styles";
 
-export type TocItem = { label: string; href: string; subitems?: TocItem[] };
+export type TocItem = {
+  label: string;
+  href: string;
+  subitems?: TocItem[];
+  /** where the entry begins in the book, 0–1 (filled in for entries that resolve to a section) */
+  fraction?: number;
+};
 
 /** Bare numerals ("১", "12") read better as "অধ্যায় ১" / "Chapter 12". */
 export function chapterLabel(label: string | null | undefined, prefix: string): string | null {
@@ -400,6 +406,19 @@ export async function createEngine(
   await view.open(book);
   const r = view.renderer;
   r.setAttribute("exportparts", "head,foot,filter");
+  const sectionFractions = view.getSectionFractions();
+  // a chapter's start, for the desk rail: the fraction of the section its entry resolves to
+  const withFractions = (items: TocItem[]): TocItem[] =>
+    items.map((it) => {
+      let fraction: number | undefined;
+      try {
+        const index = view.resolveNavigation(it.href)?.index;
+        if (index != null && Number.isFinite(sectionFractions[index])) fraction = sectionFractions[index];
+      } catch {
+        /* an entry outside the linear text: no tick */
+      }
+      return { ...it, fraction, subitems: it.subitems ? withFractions(it.subitems) : undefined };
+    });
 
 
   const clearSearchMarks = () => {
@@ -431,8 +450,8 @@ export async function createEngine(
   };
 
   const engine: Engine = {
-    toc: (book.toc ?? []) as TocItem[],
-    sectionFractions: view.getSectionFractions(),
+    toc: withFractions((book.toc ?? []) as TocItem[]),
+    sectionFractions,
     next: () => view.next(),
     prev: () => view.prev(),
     goTo: async (target) => {

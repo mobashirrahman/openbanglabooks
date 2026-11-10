@@ -41,7 +41,7 @@ test.describe("reader", () => {
     await openReader(page);
     const { columns } = await readerState(page);
     const vp = page.viewportSize()!;
-    const expected = vp.width >= 1100 && vp.width / vp.height >= 1.15 ? 2 : 1;
+    const expected = vp.width >= 960 && vp.width / vp.height >= 1.15 ? 2 : 1;
     expect(columns, `columns at ${vp.width}×${vp.height}`).toBe(expected);
     // the site navigation is gone: the reader is immersive
     await expect(page.locator("header nav")).toHaveCount(0);
@@ -53,8 +53,20 @@ test.describe("reader", () => {
     await shot(page, info, "reader-text");
   });
 
+  test("full screen is offered where the browser supports it", async ({ page }, info) => {
+    test.skip(!["tablet-1024", "laptop-1440", "desktop-1920"].includes(viewportOf(info)), "full screen is tested on the layouts that offer its button");
+    await openReader(page);
+    await showControls(page);
+    const button = page.getByRole("button", { name: "পূর্ণ পর্দায় পড়ুন" });
+    await expect(button).toBeVisible();
+    await button.click();
+    await expect.poll(() => page.evaluate(() => Boolean(document.fullscreenElement))).toBe(true);
+    await page.keyboard.press("f");
+    await expect.poll(() => page.evaluate(() => Boolean(document.fullscreenElement))).toBe(false);
+  });
+
   test("two facing pages show consecutive, different text", async ({ page }, info) => {
-    test.skip(!["laptop-1440", "desktop-1920"].includes(viewportOf(info)), "spread is a desktop layout");
+    test.skip(!["tablet-1024", "laptop-1440", "desktop-1920"].includes(viewportOf(info)), "spread is a wide landscape layout");
     await openReader(page);
     await page.keyboard.press("ArrowRight");
     await page.waitForTimeout(700);

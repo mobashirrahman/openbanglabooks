@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { ArrowLeft, Bookmark, BookmarkCheck, List, Minus, Plus, Search, Type } from "lucide-react";
+import { ArrowLeft, Bookmark, BookmarkCheck, List, Maximize, Minimize, Minus, Plus, Search, Type } from "lucide-react";
 import { chapterLabel, type Relocation, type SearchEvent, type TocItem } from "@/lib/reader/engine";
 import type { Annotation, Bookmark as BookmarkRow, WorkSnapshot } from "@/lib/local/db";
 import { SWATCH } from "@/lib/reader/annotations";
@@ -40,6 +40,8 @@ export function ReaderChrome(props: {
   onClearSearch: () => void;
   settings: ReaderSettings;
   onSettings: (p: Partial<ReaderSettings>) => void;
+  /** full screen, where the browser offers it */
+  fullscreen: { supported: boolean; active: boolean; toggle: () => void };
   columnsAvailable: boolean;
   onGoTo: (target: string) => void;
   onGoToFraction: (f: number) => void;
@@ -100,6 +102,17 @@ export function ReaderChrome(props: {
           <button type="button" className={iconBtn} aria-label={labels.settings} onClick={() => props.onSheet("settings")}>
             <Type aria-hidden className="size-5" />
           </button>
+          {props.fullscreen.supported ? (
+            <button
+              type="button"
+              className={cn(iconBtn, "hidden sm:inline-flex")}
+              aria-label={props.fullscreen.active ? labels.exitFullscreen : labels.fullscreen}
+              aria-pressed={props.fullscreen.active}
+              onClick={props.fullscreen.toggle}
+            >
+              {props.fullscreen.active ? <Minimize aria-hidden className="size-5" /> : <Maximize aria-hidden className="size-5" />}
+            </button>
+          ) : null}
         </div>
       </div>
 
@@ -498,6 +511,36 @@ function SettingsSheet(props: Parameters<typeof ReaderChrome>[0]) {
               { value: "none" as const, label: labels.turnNone },
             ]}
           />
+        ) : null}
+
+        {props.fullscreen.supported ? (
+          <div className="space-y-1 px-5 py-3">
+            <button
+              type="button"
+              role="switch"
+              aria-checked={props.fullscreen.active}
+              onClick={props.fullscreen.toggle}
+              className="flex min-h-11 w-full items-center justify-between gap-4 text-left"
+            >
+              <span className="text-sm">{props.fullscreen.active ? labels.exitFullscreen : labels.fullscreen}</span>
+              <span
+                aria-hidden
+                className={cn(
+                  "relative h-[26px] w-[44px] shrink-0 rounded-full transition-colors duration-200",
+                  props.fullscreen.active
+                    ? "bg-[var(--color-accent)]"
+                    : "bg-[color-mix(in_oklab,var(--ink)_18%,transparent)]",
+                )}
+              >
+                <span
+                  className={cn(
+                    "absolute top-[3px] size-5 rounded-full bg-[var(--paper)] shadow-sm transition-[left] duration-200",
+                    props.fullscreen.active ? "left-[21px]" : "left-[3px]",
+                  )}
+                />
+              </span>
+            </button>
+          </div>
         ) : null}
 
         <div className="space-y-1 px-5 py-3">

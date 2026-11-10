@@ -42,7 +42,8 @@ export function OpeningCover({ work, ready, reducedMotion }: { work: WorkSnapsho
     const frame = frameSize(w, h, cols, mobile);
     // a closed book: the front cover sits where the right-hand page will be
     const coverH = mobile ? Math.min(h * 0.62, (w * 0.78) * 1.5) : frame.height;
-    const coverW = coverH / 1.5;
+    // the closed cover is exactly a page, so opening it reveals the page beneath
+    const coverW = mobile ? coverH / 1.5 : frame.width / cols;
     const left = cols === 2 ? w / 2 : (w - coverW) / 2;
     const top = (h - coverH) / 2;
     const shown = book.getBoundingClientRect();

@@ -188,6 +188,8 @@ const en: Dictionary = {
     loading: "Opening the book",
     contents: "Contents",
     settings: "Reading settings",
+    fullscreen: "Read full screen",
+    exitFullscreen: "Leave full screen",
     bookmark: "Bookmark this page",
     removeBookmark: "Remove bookmark",
     bookmarks: "Bookmarks",

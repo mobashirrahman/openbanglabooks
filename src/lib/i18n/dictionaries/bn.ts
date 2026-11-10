@@ -185,6 +185,8 @@ const bn = {
     loading: "বই খোলা হচ্ছে",
     contents: "সূচিপত্র",
     settings: "পড়ার সেটিংস",
+    fullscreen: "পূর্ণ পর্দায় পড়ুন",
+    exitFullscreen: "পূর্ণ পর্দা ছাড়ুন",
     bookmark: "বুকমার্ক করুন",
     removeBookmark: "বুকমার্ক সরান",
     bookmarks: "বুকমার্ক",

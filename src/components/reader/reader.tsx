@@ -11,6 +11,7 @@ import { THEMES, type ReaderTurn } from "@/lib/reader/settings";
 import { curlSupported, fadeTurn, startCurl } from "@/lib/reader/page-curl";
 import type { TouchHandler } from "@/lib/reader/engine";
 import { useReaderSettings } from "@/lib/reader/use-reader-settings";
+import { useFullscreen } from "@/lib/reader/use-fullscreen";
 import { addBookmark, getPosition, savePosition, touchOpened } from "@/lib/reader/persistence";
 import type { Locale } from "@/lib/i18n/config";
 import type { Dictionary } from "@/lib/i18n/dictionaries/bn";
@@ -19,6 +20,7 @@ import { menuButtonClass } from "./highlight-menu";
 import { Image as ImageIcon, Search } from "lucide-react";
 import { QuoteCardDialog, type QuoteTarget } from "./quote-card-dialog";
 import { BookFrame } from "./book-frame";
+import { DeskRail } from "./desk-rail";
 import { ReaderStatus } from "./reader-status";
 import { OpeningCover } from "./opening-cover";
 import { useHighlights } from "./use-highlights";
@@ -84,6 +86,7 @@ const hasSelection = (doc: Document) => {
 export function Reader(props: ReaderProps) {
   const { work, fileSha, fileUrl, labels, locale } = props;
   const [settings, updateSettings] = useReaderSettings();
+  const fullscreen = useFullscreen();
   const [phase, setPhase] = useState<Phase>("loading");
   const [location, setLocation] = useState<Relocation | null>(null);
   const [chrome, setChrome] = useState(true);
@@ -226,6 +229,7 @@ export function Reader(props: ReaderProps) {
   const pageRef = useRef<HTMLDivElement>(null);
   const flapRef = useRef<HTMLDivElement>(null);
   const shadeRef = useRef<HTMLDivElement>(null);
+  const creaseRef = useRef<HTMLDivElement>(null);
   const lastTurnEnd = useRef(0);
   const turnStyle = useCallback((): ReaderTurn => {
     const s = settingsRef.current;
@@ -238,9 +242,10 @@ export function Reader(props: ReaderProps) {
     const page = pageRef.current;
     const flap = flapRef.current;
     const shade = shadeRef.current;
-    if (!page || !flap || !shade) return null;
+    const crease = creaseRef.current;
+    if (!page || !flap || !shade || !crease) return null;
     return {
-      els: { page, flap, shade },
+      els: { page, flap, shade, crease },
       layout: { box: { w: page.clientWidth, h: page.clientHeight }, spread: columnsRef.current === 2 },
       paper: THEMES[settingsRef.current.theme].paper,
     };
@@ -291,65 +296,118 @@ export function Reader(props: ReaderProps) {
     [flush, turnStyle],
   );
 
-  // ── page-curl drags: on touch screens the leaf follows the finger ────────
-  const drag = useRef<{ start: { x: number; y: number }; t: number; turn: ReturnType<typeof startCurl> | null; blocked: boolean } | null>(null);
+  // ── swipes: horizontal on every page-turn style; the curl also follows the finger ──
+  // One handler owns touches on the book while reading paginated. A horizontal
+  // gesture turns a page (with the curl dragged under the finger when that is
+  // the chosen style); vertical gestures are left to the browser, so selecting
+  // text and zooming still behave natively. Foliate's own swipe is bypassed:
+  // a swipe and a tap then always run through the same, queued turn.
+  type Gesture = {
+    start: { x: number; y: number };
+    t: number;
+    /** which way the finger is going, once it has moved far enough to tell */
+    intent: "h" | "v" | null;
+    turn: ReturnType<typeof startCurl> | null;
+    dir: 1 | -1;
+    /** a selection (or the start of the book): not a page turn */
+    blocked: boolean;
+  };
+  const gesture = useRef<Gesture | null>(null);
   const onTouch: TouchHandler = (phase, pt, e) => {
-    if (turnStyle() !== "curl") return false; // foliate's own swipe (slide) or none
+    // scrolled mode is the browser's own scrolling, never a page turn
+    if (settingsRef.current.flow === "scrolled") return false;
     if (phase === "start") {
-      if (e.touches.length > 1) return (drag.current = null), false; // pinch zoom is not ours
-      drag.current = { start: pt, t: Date.now(), turn: null, blocked: turning.current };
+      if (e.touches.length > 1) return (gesture.current = null), false; // pinch zoom is not ours
+      gesture.current = {
+        start: pt,
+        t: Date.now(),
+        intent: null,
+        turn: null,
+        dir: 1,
+        blocked: anySelection(), // with text selected a gesture dismisses it, it does not turn
+      };
       return true;
     }
-    const d = drag.current;
-    if (!d) return phase === "move";
+    const g = gesture.current;
+    if (!g) return phase === "move";
     if (phase === "end") {
       clearTimeout(dragWatchdog.current);
-      void d.turn?.release();
-      drag.current = null;
+      gesture.current = null;
+      if (e.type === "touchcancel") {
+        void g.turn?.cancel(); // the gesture was interrupted: lay the leaf back
+        return true;
+      }
+      if (g.turn) {
+        void g.turn.release();
+        return true;
+      }
+      const dx = pt.x - g.start.x;
+      // a deliberate flick (or the edge of the book) turns a page for slide/fade/none
+      if (g.intent === "h" && !g.blocked && (Math.abs(dx) >= 22 || locationRef.current?.atEnd)) void turnRef.current(g.dir);
       return true;
     }
-    if (e.touches.length > 1) return (drag.current = null), false;
-    if (d.blocked) return true;
-    if (!d.turn) {
-      const dx = pt.x - d.start.x;
-      const dy = pt.y - d.start.y;
-      if (Math.abs(dx) < 14 || Math.abs(dx) < Math.abs(dy) * 1.2) return true;
-      // a long press is selecting text, not turning the page
-      if (Date.now() - d.t > 450 || anySelection()) return (d.blocked = true), true;
-      const dir: 1 | -1 = dx < 0 ? 1 : -1;
+    if (e.touches.length > 1) {
+      void g.turn?.cancel();
+      gesture.current = null;
+      return false;
+    }
+    if (g.intent === "v" || g.blocked) return true;
+    const dx = pt.x - g.start.x;
+    const dy = pt.y - g.start.y;
+    if (!g.intent) {
+      // a small dead zone keeps taps and text selection intact
+      if (Math.abs(dx) < 10 && Math.abs(dy) < 10) return true;
+      if (Math.abs(dx) < 12 || Math.abs(dx) < Math.abs(dy) * 1.1) {
+        g.intent = "v";
+        return true;
+      }
+      if (anySelection()) return (g.blocked = true), true; // the long press won: selecting text
+      g.intent = "h";
+      g.dir = dx < 0 ? 1 : -1;
       const loc = locationRef.current;
       const engine = engineRef.current;
-      const curl = curlSetup();
-      if ((dir === 1 && loc?.atEnd) || (dir === -1 && loc?.atStart) || !engine || !curl) return (d.blocked = true), true;
-      const r = curl.els.page.getBoundingClientRect();
-      setChrome(false);
-      hlRef.current.closeMenu();
-      turning.current = true;
-      d.turn = startCurl({
-        ...curl,
-        dir,
-        change: () => (dir === 1 ? engine.next() : engine.prev()),
-        revert: () => (dir === 1 ? engine.prev() : engine.next()),
-        drag: { start: [d.start.x - r.left, d.start.y - r.top] },
-      });
-      void d.turn.done.finally(() => {
-        turning.current = false;
-        lastTurnEnd.current = Date.now();
-      });
-    }
-    if (e.cancelable) e.preventDefault(); // the page follows the finger instead of the view scrolling
-    const r = pageRef.current!.getBoundingClientRect();
-    d.turn.moveTo([pt.x - r.left, pt.y - r.top]);
-    // if the finger's frame goes away (the turn crossed into a new chapter, whose iframe
-    // replaced the one the touch began in), its remaining events never arrive: let go
-    clearTimeout(dragWatchdog.current);
-    const turnNow = d.turn;
-    dragWatchdog.current = setTimeout(() => {
-      if (drag.current?.turn === turnNow) {
-        void turnNow.release();
-        drag.current = null;
+      if (!engine || (g.dir === -1 && loc?.atStart)) return (g.blocked = true), true;
+      // at the very end a forward swipe still asks for the end screen (turn() shows it)
+      const curl = turnStyle() === "curl" && !turning.current && !(g.dir === 1 && loc?.atEnd) ? curlSetup() : null;
+      if (curl && engine) {
+        const r = curl.els.page.getBoundingClientRect();
+        setChrome(false);
+        hlRef.current.closeMenu();
+        turning.current = true;
+        g.turn = startCurl({
+          ...curl,
+          dir: g.dir,
+          change: () => (g.dir === 1 ? engine.next() : engine.prev()),
+          revert: () => (g.dir === 1 ? engine.prev() : engine.next()),
+          drag: { start: [g.start.x - r.left, g.start.y - r.top] },
+        });
+        void g.turn.done.finally(() => {
+          turning.current = false;
+          lastTurnEnd.current = Date.now();
+        });
+      } else if (!turning.current) {
+        setChrome(false);
+        hlRef.current.closeMenu();
       }
-    }, 1200);
+    }
+    if (g.intent === "h") {
+      if (e.cancelable) e.preventDefault(); // the page follows the finger instead of the view scrolling
+      if (g.turn) {
+        const r = pageRef.current!.getBoundingClientRect();
+        g.turn.moveTo([pt.x - r.left, pt.y - r.top]);
+        // if the finger's frame goes away (the turn crossed into a new chapter, whose iframe
+        // replaced the one the touch began in), its remaining events never arrive: let go
+        clearTimeout(dragWatchdog.current);
+        const turnNow = g.turn;
+        dragWatchdog.current = setTimeout(() => {
+          if (gesture.current?.turn === turnNow) {
+            void turnNow.release();
+            gesture.current = null;
+          }
+        }, 1200);
+      }
+      return true;
+    }
     return true;
   };
   const dragWatchdog = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
@@ -618,6 +676,8 @@ export function Reader(props: ReaderProps) {
   sheetRef.current = sheet;
   const quoteRef = useRef(quoteTarget);
   quoteRef.current = quoteTarget;
+  const fullscreenRef = useRef(fullscreen);
+  fullscreenRef.current = fullscreen;
   function handleKey(e: KeyboardEvent) {
     if (sheetRef.current || hlRef.current.isEditing() || quoteRef.current) return;
     if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === "f") {
@@ -648,6 +708,13 @@ export function Reader(props: ReaderProps) {
       case "t":
       case "T":
         setSheet("toc");
+        break;
+      case "f":
+      case "F":
+        if (fullscreenRef.current.supported) {
+          e.preventDefault();
+          void fullscreenRef.current.toggle();
+        }
         break;
       case "Escape":
         if (hlRef.current.isOpen()) {
@@ -750,6 +817,8 @@ export function Reader(props: ReaderProps) {
   }, [phase, remotePlaces, fileSha, goTo, goToFraction, labels, locale]);
 
   const frame = frameSize(stage.width, stage.height, columns, mobile);
+  // desk beside the book; a wide margin can carry the chapter rail without ever crowding the page
+  const desk = Math.max(0, (stage.width - frame.width) / 2);
 
   // theme variables live on <html> so portalled sheets (rendered under <body>) share them
   useEffect(() => {
@@ -796,9 +865,11 @@ export function Reader(props: ReaderProps) {
           mobile={mobile}
           fraction={location?.fraction ?? 0}
           sweep={reducedMotion || settings.turn !== "slide" ? null : sweep}
+          edgeButtons={desk >= 90}
           pageRef={pageRef}
           flapRef={flapRef}
           shadeRef={shadeRef}
+          creaseRef={creaseRef}
           dark={settings.theme === "dark"}
           onEdge={(dir) => void turn(dir)}
           labels={{ prev: labels.prevPage, next: labels.nextPage }}
@@ -806,6 +877,21 @@ export function Reader(props: ReaderProps) {
           <div ref={hostRef} className="absolute inset-0" />
         </BookFrame>
       </div>
+
+      {phase === "ready" && !mobile && desk >= 120 ? (
+        <DeskRail
+          toc={engineRef.current?.toc ?? []}
+          bookmarks={bookmarks ?? []}
+          fraction={location?.fraction ?? 0}
+          currentHref={location?.tocHref ?? null}
+          top={Math.round((stage.height - frame.height) / 2 + frame.height * 0.04)}
+          height={Math.round(frame.height * 0.92)}
+          right={Math.max(10, Math.round((desk - 40) / 2))}
+          dimmed={!chrome}
+          labels={{ contents: labels.contents, bookmarks: labels.bookmarks, chapterOf: labels.chapterOf }}
+          onGoTo={goTo}
+        />
+      ) : null}
 
       {phase === "ready" ? (
         <ReaderChrome
@@ -829,6 +915,7 @@ export function Reader(props: ReaderProps) {
           onClearSearch={clearSearch}
           settings={settings}
           onSettings={updateSettings}
+          fullscreen={fullscreen}
           columnsAvailable={!mobile && columnsFor(stage.width, stage.height, "spread") === 2}
           onGoTo={goTo}
           onGoToFraction={goToFraction}

@@ -17,6 +17,8 @@ html {
   font-size: ${(s.fontSize / 100) * 19}px !important;
   -webkit-text-size-adjust: 100%;
   text-rendering: optimizeLegibility;
+  /* a page turn must never chain into the browser's own overscroll/swipe-back */
+  overscroll-behavior: none;
 }
 body {
   background: transparent !important;
@@ -27,6 +29,9 @@ body {
   word-break: normal;
   overflow-wrap: break-word;
   font-kerning: normal;
+  /* paginated pages turn by swipe alone: leave horizontal panning to the
+     reader instead of the browser (pinch-zoom stays available) */
+  touch-action: ${s.flow === "paginated" ? "pan-y pinch-zoom" : "auto"};
 }
 p, li, blockquote, dd, td, div {
   font-family: inherit !important;
