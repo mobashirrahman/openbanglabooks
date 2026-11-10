@@ -261,6 +261,47 @@ Precedence: **CLI flags → sidecar → PDF `/Info` → filename → defaults**.
 Cover selection is still `--cover auto|original|generate|none`; the sidecar
 cover fields will be added with the cover-resolution step.
 
+## Conservative proofreading (opt-in)
+
+`--proofread` runs the existing `pdf-craft` `ConservativeProofreader` after
+Tesseract extraction. The model proposes **exact whole-word** edits; validation
+rejects anything that is not a unique Bengali word change, changes more than two
+characters, touches protected words, or exceeds the paragraph budget. Each
+accepted edit is then corroborated by re-OCRing the original word crop at 2×
+with PSM 8 and 13; without that evidence the edit stays in review.
+
+```bash
+pnpm pdf:epub -- book.pdf --engine tesseract --ocr always \
+  --proofread --proofread-model qwen3.5:4b --ollama-url http://127.0.0.1:11434 \
+  --tesseract "$(which tesseract)" --tessdata tessdata \
+  --out dist/book.epub
+```
+
+Useful switches:
+
+- `--review-only` — write the audit but change no text. Recommended for a new
+  edition until its held-out benchmark supports automatic edits.
+- `--protected-word NAME` — repeat for names or spellings that must not change.
+- `--ollama-url`, `--proofread-model` — select the Ollama server and model.
+
+Outputs under the work bundle:
+
+```
+proofread/audit/p<page>-b<block>.json   # proposals, decisions, evidence
+proofread/evidence/*.png               # word crops used for corroboration
+proofread/proofread.pcex               # proofread extraction
+```
+
+The pass fails closed: a missing Ollama/model, malformed response, incomplete
+generation or unsupported edit leaves the original text unchanged. An LLM
+confidence value is never treated as proof of correctness.
+
+**Performance note:** on the 4 GB test host, `qwen3.5:4b-q4_K_M` took roughly
+two minutes per block; five pages (21 audited blocks) took ~46 minutes and
+applied no edits because the crop evidence did not support them. Treat this as
+an opt-in quality pass, not a bulk default. Use a GPU-backed model, a smaller
+page range, or a faster server for whole books.
+
 ## OCR model choice
 
 `datalab-to/surya-ocr-2` is the default and stays the default. The November

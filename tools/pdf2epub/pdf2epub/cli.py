@@ -17,6 +17,8 @@ from .bundle import write_bundle
 from .cover import decide_cover
 from .metadata import apply_metadata, load_metadata
 from .ocr import DEFAULT_MODEL, extract_ocr_pages, load_raw, pages_from_json
+from .proofread import DEFAULT_MODEL as PROOFREAD_MODEL
+from .proofread import DEFAULT_URL as OLLAMA_URL
 from .pdf import file_sha256, inspect_pdf, open_pdf
 from .structure import build_book
 from .textlayer import extract_text_pages
@@ -77,6 +79,11 @@ def _parser() -> argparse.ArgumentParser:
     ext.add_argument("--pdfcraft-language", default="ben", help="Tesseract language code for pdf-craft (default: ben)")
     ext.add_argument("--tessdata", type=Path, help="tessdata directory for pdf-craft")
     ext.add_argument("--pdfcraft-recover-structure", action="store_true", help="run pdf-craft reading-structure recovery before conversion")
+    ext.add_argument("--proofread", action="store_true", help="propose and apply crop-corroborated LLM proofreading edits")
+    ext.add_argument("--review-only", action="store_true", help="write the proofreading audit but change no text")
+    ext.add_argument("--ollama-url", default=OLLAMA_URL, help="Ollama server for proofreading")
+    ext.add_argument("--proofread-model", default=PROOFREAD_MODEL, help="Ollama model for proofreading")
+    ext.add_argument("--protected-word", action="append", default=[], help="word the proofreader must not change (repeatable)")
 
     imp = sub.add_parser("import-ocr", help="build a bundle from a saved surya_ocr results.json")
     _common(imp)
@@ -220,6 +227,14 @@ def _extract(args: argparse.Namespace) -> int:
         return 2
     if metadata_path and not args.quiet:
         print(f"metadata: {metadata_path}")
+    if getattr(args, "proofread", False) and (
+        args.command != "extract" or getattr(args, "engine", "surya") != "tesseract"
+    ):
+        print(
+            "warning: --proofread currently applies to the tesseract/pdf-craft engine; ignoring",
+            file=sys.stderr,
+        )
+        args.proofread = False
     info = inspect_pdf(pdf)
     sha = file_sha256(pdf)
     if args.command == "extract" and getattr(args, "engine", "surya") == "tesseract":

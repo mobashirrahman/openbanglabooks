@@ -32,6 +32,11 @@ const { values: args, positionals } = parseArgs({
     tessdata: { type: "string" },
     metadata: { type: "string" },
     "pdfcraft-recover-structure": { type: "boolean", default: false },
+    proofread: { type: "boolean", default: false },
+    "review-only": { type: "boolean", default: false },
+    "ollama-url": { type: "string" },
+    "proofread-model": { type: "string" },
+    "protected-word": { type: "string", multiple: true },
     dpi: { type: "string", default: "300" },
     cover: { type: "string", default: "auto" },
     "no-fonts": { type: "boolean", default: false },
@@ -115,6 +120,11 @@ if (args["pdfcraft-language"]) extractArgs.push("--pdfcraft-language", args["pdf
 if (args.tessdata) extractArgs.push("--tessdata", resolve(args.tessdata));
 if (args.metadata) extractArgs.push("--metadata", resolve(args.metadata));
 if (args["pdfcraft-recover-structure"]) extractArgs.push("--pdfcraft-recover-structure");
+if (args.proofread) extractArgs.push("--proofread");
+if (args["review-only"]) extractArgs.push("--review-only");
+if (args["ollama-url"]) extractArgs.push("--ollama-url", args["ollama-url"]);
+if (args["proofread-model"]) extractArgs.push("--proofread-model", args["proofread-model"]);
+for (const word of args["protected-word"] ?? []) extractArgs.push("--protected-word", word);
 if (args.dpi) extractArgs.push("--dpi", args.dpi);
 if (args.cover) extractArgs.push("--cover", args.cover);
 if (args["keep-raw"]) extractArgs.push("--keep-raw");

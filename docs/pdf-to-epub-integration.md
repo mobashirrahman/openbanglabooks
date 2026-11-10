@@ -94,6 +94,28 @@ Verified on the same Nishkriti 12-page extract:
 Tests: `tools/pdf2epub/tests/test_pdfcraft_split.py`; full `pdf2epub` suite
 (26 tests) and `pnpm typecheck` pass.
 
+## Step 3 — opt-in conservative proofreading (implemented, experimental)
+
+`pdf2epub` now passes the raw `.pcex` through `pdf-craft`'s
+`ConservativeProofreader` when `--proofread` is set. It writes:
+
+- `proofread/audit/p<page>-b<block>.json` — proposals, decisions, evidence;
+- `proofread/evidence/*.png` — source word crops used for corroboration;
+- `proofread/proofread.pcex` — the proofread extraction.
+
+Verification on Nishkriti pages 1–5 with `qwen3.5:4b-q4_K_M`:
+
+- the audit was produced (21 blocks; 10 unchanged, 10 review, 1 timeout);
+- proposed edits such as `ক্লিকাতা → কলকাতা` were correctly held for review
+  because the crop evidence did not corroborate them;
+- no unsafe edit was applied;
+- the run took ~46 minutes on this 4 GB host (~2 min/block), so it is opt-in,
+  not a bulk default. A GPU-backed model or a narrower page range is required
+  for whole books.
+
+This step is committed as code + docs; the 5-page proofread run is a safety and
+wiring check, not an accuracy claim.
+
 ## Next planned steps
 
 1. **Structure:** make `recover_structure` the default only where it demonstrably

@@ -1118,7 +1118,12 @@ def extract_with_pdfcraft(pdf: Path, out: Path, args: Any) -> tuple[BuiltBook, C
     )
     craft = PDFCraft(pdf=PDFOptions(ocr=ocr))
     try:
-        craft.extract_pdf(pdf, pcex_path, options=options)
+        craft.extract_pdf(pdf, pcex_path, options=options, analysing_path=out / "analysis")
+        if getattr(args, "proofread", False):
+            from .proofread import proofread_pcex
+
+            pcex_path = proofread_pcex(pdf, out, pcex_path, craft, ocr, args)
+            ocr_label = f"{ocr_label}+proofread"
     finally:
         craft.release_pdf_resources()
 
