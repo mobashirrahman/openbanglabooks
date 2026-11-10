@@ -184,3 +184,103 @@ def test_apply_resolution_nothing_accepted():
     assert args.title is None
     assert args.author is None
     assert record["applied"] == {"title": None, "authors": None}
+
+
+# ---------------------------------------------------------------------------
+# Scrape catalogue signal
+# ---------------------------------------------------------------------------
+
+SCRAPE_TITLE = (
+    "নিষ্কৃতি বাংলা বই পিডিএফ ডাউনলোড| Nishkriti Bengali Book PDF Download"
+)
+
+
+def _scrape(**overrides) -> dict:
+    record = {
+        "site": "granthagara",
+        "page_url": "https://granthagara.com/boi/327910-nishkriti/",
+        "page_title": SCRAPE_TITLE,
+        "author": None,
+        "publisher": None,
+        "published_date": None,
+        "isbn": None,
+        "asset_url": "https://archive.org/download/x/2015.456069.Nishkriti.pdf",
+        "asset_path": f"/data/{HASH}.pdf",
+    }
+    record.update(overrides)
+    return record
+
+
+def test_scrape_title_resolves_hash_filename():
+    record = resolve_metadata(
+        f"/x/book-scrapper/granthagara/books/{HASH}.pdf", {}, scrape=[_scrape()]
+    )
+    assert record["status"] == "ok"
+    assert record["title"]["value"] == "নিষ্কৃতি"
+    assert record["title"]["signals"] == ["scrape"]
+    assert record["scrape"]["trusted"] is True
+    assert record["scrape"]["matches"][0]["confidence"] == 0.8
+
+
+def test_scrape_title_conflicts_with_trusted_pdf_info():
+    record = resolve_metadata(
+        f"/x/{HASH}.pdf",
+        {"title": "সম্পূর্ণ অন্য একটি নাম"},
+        scrape=[_scrape()],
+    )
+    assert record["status"] == "ambiguous"
+    assert record["title"]["value"] is None
+    assert record["title"]["conflict"] is True
+
+
+def test_filename_from_the_same_site_is_not_double_counted():
+    record = resolve_metadata(GRANTHAGARA, {}, scrape=[_scrape()])
+    assert record["title"]["value"] == "নিষ্কৃতি"
+    assert record["title"]["signals"] == ["scrape"]
+    assert record["filename"]["trusted"] is False
+
+
+def test_scrape_author_column_is_accepted():
+    record = resolve_metadata(
+        f"/x/books/{HASH}.pdf",
+        {},
+        scrape=[
+            _scrape(
+                site="arefinlibrary",
+                page_title="কোনো একটা বই",
+                author="হুমায়ূন আহমেদ",
+            )
+        ],
+    )
+    assert record["authors"]["value"] == ["হুমায়ূন আহমেদ"]
+    assert record["status"] == "ok"
+
+
+def test_disagreeing_scrape_titles_are_not_accepted():
+    other = "ভিন্ন বাংলা বই পিডিএফ ডাউনলোড| Different Bengali Book PDF Download"
+    record = resolve_metadata(
+        f"/x/{HASH}.pdf",
+        {},
+        scrape=[
+            _scrape(),
+            _scrape(page_url="https://granthagara.com/boi/other/", page_title=other),
+        ],
+    )
+    assert record["title"]["value"] is None
+    assert record["scrape"]["trusted"] is False
+    assert record["scrape"]["notes"]
+
+
+def test_same_site_filename_cannot_rescue_untrusted_scrape_titles():
+    """Disagreeing scrape rows plus their own site's filename are still one source."""
+    other = "ভিন্ন বাংলা বই পিডিএফ ডাউনলোড| Different Bengali Book PDF Download"
+    record = resolve_metadata(
+        GRANTHAGARA,
+        {},
+        scrape=[
+            _scrape(),
+            _scrape(page_url="https://granthagara.com/boi/other/", page_title=other),
+        ],
+    )
+    assert record["title"]["value"] is None
+    assert record["status"] == "empty"

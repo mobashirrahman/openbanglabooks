@@ -29,16 +29,17 @@ import unicodedata
 from pathlib import Path
 from typing import Any
 
-from .filename_parser import parse_filename
+from .filename_parser import parse_filename, parse_source_title
 
 __all__ = ["RESOLVER", "resolve_metadata", "apply_resolution"]
 
 RESOLVER = "pdf2epub-metadata-v1"
 
-# A filename only competes for acceptance when it matched a scraper template.
+# A filename or scraped page title only competes for acceptance when it
+# matched a scraper template.
 TRUSTED_CONFIDENCE = 0.5
 
-SIGNAL_ORDER = ("filename", "pdf_info", "cover")
+SIGNAL_ORDER = ("scrape", "filename", "pdf_info", "cover")
 
 _UUID_RE = re.compile(
     r"[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}",
@@ -143,8 +144,16 @@ def _dedupe(values: list[str]) -> list[str]:
     return out
 
 
-def _candidates(signals: dict[str, list[tuple[str, bool]]]) -> list[dict[str, Any]]:
-    """Merge per-signal values into ranked candidates (first signal wins)."""
+def _candidates(
+    signals: dict[str, list[tuple[str, bool]]],
+    *,
+    skip_support: set[str] | frozenset[str] = frozenset(),
+) -> list[dict[str, Any]]:
+    """Merge per-signal values into ranked candidates (first signal wins).
+
+    ``skip_support`` keeps a signal's values as candidates but stops them from
+    corroborating a value (used for a filename derived from a scrape page).
+    """
     seen: dict[str, dict[str, Any]] = {}
     ordered: list[dict[str, Any]] = []
     for name in SIGNAL_ORDER:
@@ -164,7 +173,7 @@ def _candidates(signals: dict[str, list[tuple[str, bool]]]) -> list[dict[str, An
                 ordered.append(entry)
             else:
                 entry["trusted"] = bool(entry["trusted"] or trusted)
-            if name not in entry["support"]:
+            if name not in skip_support and name not in entry["support"]:
                 entry["support"].append(name)
     return ordered
 
@@ -238,11 +247,99 @@ def _public_candidates(candidates: list[dict[str, Any]]) -> list[dict[str, Any]]
     ]
 
 
+def _scrape_evidence(
+    scrape: list[dict],
+) -> tuple[list[tuple[str, bool]], list[tuple[str, bool]], dict[str, Any]]:
+    """Turn book-scrapper catalogue rows into signal values and a report block.
+
+    A row contributes only its scraped page title (parsed with the same
+    per-site template used for filenames) and a non-empty ``author`` column.
+    Publisher/date/ISBN are recorded in the block but never applied.
+    """
+    matches: list[dict[str, Any]] = []
+    notes: list[str] = []
+    title_entries: list[tuple[list[str], bool]] = []
+    author_entries: list[list[str]] = []
+
+    for record in scrape or []:
+        site = str(record.get("site") or "")
+        page_title = _raw(record.get("page_title"))
+        parsed = parse_source_title(page_title, site) if page_title else None
+        titles = [str(title) for title in (parsed.titles if parsed else ())]
+        confidence = float(parsed.confidence) if parsed else 0.0
+        raw_author = _raw(record.get("author"))
+        authors = _split_authors(raw_author) if raw_author else []
+        matches.append(
+            {
+                "site": site,
+                "page_url": record.get("page_url"),
+                "page_title": page_title,
+                "titles": titles,
+                "confidence": confidence,
+                "trusted": confidence >= TRUSTED_CONFIDENCE,
+                "author": raw_author,
+                "authors": authors,
+                "publisher": record.get("publisher"),
+                "published_date": record.get("published_date"),
+                "isbn": record.get("isbn"),
+                "asset_url": record.get("asset_url"),
+            }
+        )
+        if titles:
+            title_entries.append((titles, confidence >= TRUSTED_CONFIDENCE))
+        if authors:
+            author_entries.append(authors)
+
+    # Several rows are only one signal: if their parsed titles disagree, that
+    # signal cannot accept a title on its own (the candidates are kept below).
+    title_sets = {
+        frozenset(_normalize(title) for title in titles if _normalize(title))
+        for titles, _ in title_entries
+    }
+    title_sets.discard(frozenset())
+    title_disagreement = len(title_sets) > 1
+    if title_disagreement:
+        notes.append("scrape page titles disagree; scrape title left untrusted")
+
+    author_sets = {
+        frozenset(_normalize(author) for author in authors)
+        for authors in author_entries
+    }
+    author_disagreement = len(author_sets) > 1
+    if author_disagreement:
+        notes.append("scrape authors disagree; scrape authors left untrusted")
+
+    title_values: list[tuple[str, bool]] = []
+    for titles, trusted in title_entries:
+        for title in titles:
+            if str(title).strip():
+                title_values.append((title, trusted and not title_disagreement))
+
+    author_values = _dedupe(
+        [author for authors in author_entries for author in authors]
+    )
+    author_signal = [
+        (author, not author_disagreement) for author in author_values
+    ]
+
+    title_trusted = not title_disagreement and any(
+        trusted for _, trusted in title_entries
+    )
+    author_trusted = bool(author_values) and not author_disagreement
+    block = {
+        "matches": matches,
+        "trusted": bool(title_trusted or author_trusted),
+        "notes": notes,
+    }
+    return title_values, author_signal, block
+
+
 def resolve_metadata(
     pdf_path: Path,
     pdf_info: dict[str, str],
     *,
     cover: dict | None = None,
+    scrape: list[dict] | None = None,
 ) -> dict:
     """Resolve a PDF's title/authors from offline signals (no network/OCR).
 
@@ -250,7 +347,12 @@ def resolve_metadata(
     junk placeholders and filename-laundered values are rejected and recorded
     in ``pdf_info.rejected``. ``cover`` is a reserved hook for cover-OCR
     readings (``{"titles": [...], "authors": [...]}``): a WEAK signal that may
-    corroborate another one but can never be accepted alone. No OCR runs here.
+    corroborate another one but can never be accepted alone. ``scrape`` holds
+    read-only rows from the book-scrapper catalogues
+    (:func:`pdf2epub.scrape_catalog.lookup_scrape_records`): only the scraped
+    page title and the ``author`` column are applied, and a filename derived
+    from the same site is not counted as an independent signal. No OCR runs
+    here.
 
     The returned dict is JSON-serialisable; volume/edition/year appear only in
     the ``filename`` block and are never applied to a field.
@@ -287,28 +389,51 @@ def resolve_metadata(
     cover = cover or {}
     cover_titles = [str(v) for v in (cover.get("titles") or []) if str(v).strip()]
     cover_authors = [str(v) for v in (cover.get("authors") or []) if str(v).strip()]
+    scrape_titles, scrape_authors, scrape_block = _scrape_evidence(scrape or [])
     filename_trusted = bool(filename_block["trusted"])
 
+    # Independence rule: when the filename carries the same site key as a
+    # scrape record, the scraper almost certainly named the downloaded file
+    # after that site's page -- so the two are one source, not two. Counting
+    # them as agreeing would fabricate corroboration. The filename stays a
+    # candidate, but it is untrusted and contributes no support.
+    scrape_sites = {str(record.get("site") or "") for record in (scrape or [])}
+    filename_dependent = bool(parsed.source) and parsed.source in scrape_sites
+    if filename_dependent:
+        filename_trusted = False
+        filename_block["trusted"] = False
+        scrape_block["notes"].append(
+            f"filename source '{parsed.source}' matches the scrape site; "
+            "filename kept as a candidate but not counted as independent"
+        )
+
     title_signals = {
+        "scrape": scrape_titles,
         "filename": [(v, filename_trusted) for v in parsed.titles if str(v).strip()],
         "pdf_info": [(v, True) for v in info_titles],
         "cover": [(v, False) for v in cover_titles],
     }
     author_signals = {
+        "scrape": scrape_authors,
         "filename": [(v, filename_trusted) for v in parsed.authors if str(v).strip()],
         "pdf_info": [(v, True) for v in info_authors],
         "cover": [(v, False) for v in cover_authors],
     }
+    skip_support = {"filename"} if filename_dependent else frozenset()
 
     if parsed.is_not_a_book:
         title_block = {"value": None, "candidates": [], "conflict": False, "signals": []}
         author_block = {"value": [], "candidates": [], "conflict": False, "signals": []}
         status = "not_a_book"
     else:
-        title_candidates = _candidates(title_signals)
-        author_candidates = _candidates(author_signals)
-        title_value, title_conflict = _resolve_title(title_signals)
-        author_value, author_conflict = _resolve_authors(author_signals)
+        title_candidates = _candidates(title_signals, skip_support=skip_support)
+        author_candidates = _candidates(author_signals, skip_support=skip_support)
+        # A dependent filename must not vote either: the weak-signal branch of
+        # the resolvers counts any two agreeing signals, so drop it there too.
+        decide_titles = {**title_signals, "filename": []} if filename_dependent else title_signals
+        decide_authors = {**author_signals, "filename": []} if filename_dependent else author_signals
+        title_value, title_conflict = _resolve_title(decide_titles)
+        author_value, author_conflict = _resolve_authors(decide_authors)
         title_block = {
             "value": title_value,
             "candidates": _public_candidates(title_candidates),
@@ -341,6 +466,7 @@ def resolve_metadata(
             "author": raw_author,
             "rejected": rejected,
         },
+        "scrape": scrape_block,
     }
 
 

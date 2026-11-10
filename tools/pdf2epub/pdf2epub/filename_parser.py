@@ -27,7 +27,7 @@ import os
 import re
 from dataclasses import dataclass
 
-__all__ = ["ParsedFilename", "parse_filename"]
+__all__ = ["ParsedFilename", "parse_filename", "parse_source_title"]
 
 
 @dataclass(frozen=True)
@@ -512,16 +512,14 @@ def _parse_title_only(work: str) -> tuple[list[str], list[str], float]:
 # ---------------------------------------------------------------------------
 
 
-def parse_filename(source_path: str) -> ParsedFilename:
-    """Parse a document's `source_path` into title/author candidates."""
-    source = _source_key(source_path)
-    base = re.split(r"[\\/]", source_path)[-1]
-    stem, _ext = os.path.splitext(base)
-    stem = stem.strip()
+def _parse_work(stem: str, source: str, source_path: str) -> ParsedFilename:
+    """Shared body for `parse_filename` and `parse_source_title`.
 
-    if source == "banglabook":
-        # MOJIBAKE source (309 files): UTF-8 bytes decoded as Latin-1.
-        stem = _repair_mojibake(stem)
+    ``stem`` is the bare work string (no directory, no extension); ``source``
+    picks the per-site template and ``source_path`` is only consulted for the
+    ``authordir`` parent-directory author. Passing ``""`` disables that.
+    """
+    stem = stem.strip()
 
     if _CONTENT_HASH_RE.fullmatch(stem):
         # puthi: a content-hash filename is a placeholder, like the
@@ -638,6 +636,38 @@ def parse_filename(source_path: str) -> ParsedFilename:
         confidence=confidence,
         directory_author=directory_author,
     )
+
+
+def parse_filename(source_path: str) -> ParsedFilename:
+    """Parse a document's `source_path` into title/author candidates."""
+    source = _source_key(source_path)
+    base = re.split(r"[\\/]", source_path)[-1]
+    stem, _ext = os.path.splitext(base)
+    stem = stem.strip()
+
+    if source == "banglabook":
+        # MOJIBAKE source (309 files): UTF-8 bytes decoded as Latin-1.
+        stem = _repair_mojibake(stem)
+
+    return _parse_work(stem, source, source_path)
+
+
+# puthi: scraped page titles use the same per-source templates as filenames,
+# so the resolver can reuse them without inventing a second parser.
+def parse_source_title(text: str, source: str) -> ParsedFilename:
+    """Parse a scraped *page title* with the template for ``source``.
+
+    The page title is bare text: no directory, extension or hash handling. The
+    granthagara scraper joins the Bengali and English halves with ``"| "`` in
+    page titles where filenames use ``"_ "``, so that separator is normalised
+    to ``"_"`` first (granthagara only).
+    """
+    work = " ".join(str(text or "").split())
+    if source == "granthagara":
+        work = work.replace("|", "_")
+    if not work:
+        return ParsedFilename(titles=(), authors=(), source=source, confidence=0.0)
+    return _parse_work(work, source, "")
 
 
 # Bengali sentence terminators used as a title/author separator in this corpus:

@@ -21,6 +21,7 @@ from .proofread import DEFAULT_MODEL as PROOFREAD_MODEL
 from .proofread import DEFAULT_URL as OLLAMA_URL
 from .pdf import file_sha256, inspect_pdf, open_pdf
 from .resolve import apply_resolution, resolve_metadata
+from .scrape_catalog import lookup_scrape_records
 from .structure import build_book
 from .textlayer import extract_text_pages
 
@@ -58,6 +59,11 @@ def _common(parser: argparse.ArgumentParser) -> None:
     parser.add_argument("--max-pages", type=int, default=0, help="limit pages (for trials)")
     parser.add_argument("--keep-raw", action="store_true", help="write raw OCR JSON into the bundle")
     parser.add_argument("--metadata", type=Path, help="publication metadata sidecar (JSON)")
+    parser.add_argument(
+        "--scrape-catalog",
+        type=Path,
+        help="book-scrapper data dir; look up this PDF's SHA-256 in <site>/catalog.sqlite3 (read-only)",
+    )
     parser.add_argument("--quiet", action="store_true")
 
 
@@ -220,6 +226,9 @@ def _extract(args: argparse.Namespace) -> int:
     # explicit CLI flag from a sidecar value.
     cli_title = args.title
     cli_author = args.author
+    # Computed once, before resolution, because the scrape catalogue is keyed
+    # by the file's SHA-256.
+    sha = file_sha256(pdf)
     try:
         values, metadata_path = load_metadata(
             pdf,
@@ -233,6 +242,21 @@ def _extract(args: argparse.Namespace) -> int:
         return 2
     if metadata_path and not args.quiet:
         print(f"metadata: {metadata_path}")
+    scrape_records: list[dict[str, Any]] = []
+    scrape_dir = getattr(args, "scrape_catalog", None)
+    if scrape_dir is not None:
+        if not scrape_dir.exists():
+            print(f"warning: scrape catalog not found: {scrape_dir}", file=sys.stderr)
+        else:
+            try:
+                scrape_records = lookup_scrape_records(scrape_dir, sha)
+            except OSError as exc:
+                print(f"warning: scrape catalog lookup failed: {exc}", file=sys.stderr)
+        if not args.quiet:
+            sites = sorted(
+                {record.get("site") or "" for record in scrape_records if record.get("site")}
+            )
+            print(f"scrape: {len(scrape_records)} record(s) ({', '.join(sites)})")
     if getattr(args, "proofread", False) and (
         args.command != "extract" or getattr(args, "engine", "surya") != "tesseract"
     ):
@@ -242,7 +266,7 @@ def _extract(args: argparse.Namespace) -> int:
         )
         args.proofread = False
     info = inspect_pdf(pdf)
-    record = resolve_metadata(pdf, info.metadata)
+    record = resolve_metadata(pdf, info.metadata, scrape=scrape_records)
     apply_resolution(args, record, cli_title=cli_title, cli_author=cli_author)
     if not args.title and not args.quiet:
         print(
@@ -250,7 +274,6 @@ def _extract(args: argparse.Namespace) -> int:
             "pass --title or a metadata sidecar",
             file=sys.stderr,
         )
-    sha = file_sha256(pdf)
     if args.command == "extract" and getattr(args, "engine", "surya") == "tesseract":
         return _extract_with_pdfcraft(args, pdf, out, info, sha)
     doc = open_pdf(pdf)

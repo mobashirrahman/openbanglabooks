@@ -245,6 +245,50 @@ full `pdf2epub` suite 99 passed; `pnpm typecheck` and the EPUB unit tests pass.
 Next: cover/title-page OCR as a corroborating signal, then local catalogue and
 Wikidata lookups behind an explicit flag.
 
+## Step 11 — scrape-record signal (implemented)
+
+The book scraper names downloads by SHA-256 and keeps one SQLite catalogue per
+site (`book-scrapper/data/<site>/catalog.sqlite3`). `--scrape-catalog <data dir>`
+looks the PDF's SHA-256 up in every site catalogue (`assets → links → pages`)
+and adds a `scrape` signal to the resolver:
+
+- the scraped page title is parsed with the same per-site templates as
+  filenames (`parse_source_title`; granthagara's `| ` separator is normalised);
+- a matched template (confidence ≥ 0.5) is trusted; a non-empty `author`
+  column (arefinlibrary) is a trusted author value;
+- a filename from the same site is one source with the page, not a second
+  signal: it stays a candidate but cannot corroborate (regression-tested);
+- rows that disagree with each other cannot accept a title alone;
+- publisher/date/ISBN/asset URL are recorded in `resolution.scrape`, never
+  applied.
+
+Catalogues are opened `mode=ro&immutable=1`. That never writes `-shm`/`-wal`
+files, but SQLite then ignores any not-yet-checkpointed WAL content, so rows
+the scraper is writing at that moment may be missed. Run lookups when the
+scraper is idle.
+
+Local catalogue survey (2026-11-10): ~90k pages with titles across 25 sites,
+~59k hashed downloads; authors only on arefinlibrary (2,638); no publisher or
+ISBN. 21,100 of granthagara's 23,175 files are Digital Library of India scans.
+
+Verified on Nishkriti 12 pages, **no sidecar**:
+
+```text
+scrape: 1 record(s) (granthagara)
+status ok, applied title = resolver, title.signals = [scrape]
+EPUB: নিষ্কৃতি | অজ্ঞাত        (was শিরোনামহীন)
+EPUBCheck 5.4.0: 0 fatals / 0 errors / 0 warnings
+```
+
+All 79 `catalog.sqlite3*` files under the scraper data dir had identical size
+and mtime before and after the run. Tests: 110 `pdf2epub` tests pass (new
+`test_scrape_catalog.py`, scrape cases in `test_resolve.py`); `pnpm typecheck`
+passes.
+
+Next: rebuild the Rokomari-derived catalogue from the published dumps
+(Hugging Face `sayurio/rokomari-bd-product-data` + the RokomariBG graph) as a
+local title → author index; authors still need a second signal.
+
 ## Proofreading options measured
 
 On the same Bengali paragraph through Ollama:

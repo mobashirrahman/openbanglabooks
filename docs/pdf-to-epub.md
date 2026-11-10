@@ -151,12 +151,18 @@ pnpm pdf:epub -- book.pdf --ocr-json results.json --out dist/book.epub
 pnpm pdf:epub -- book.pdf --cover original   # fail if there is no cover image
 pnpm pdf:epub -- book.pdf --cover generate   # always draw one
 pnpm pdf:epub -- book.pdf --cover none       # no cover page
+
+# Reuse the book-scraper catalogues as title/author evidence
+pnpm pdf:epub -- book.pdf --scrape-catalog /path/to/book-scrapper/data \
+  --out dist/book.epub
 ```
 
 Metadata flags: `--title`, `--title-en`, `--subtitle`, `--author`,
 `--author-en`, `--author-sort`, `--language`, `--publisher`,
 `--first-published`, `--source-name`, `--source-url`, `--rights`, `--license`,
 `--license-url`, `--description`, `--subject` (repeatable), `--modified`.
+The resolver can also read the book-scraper catalogues with
+`--scrape-catalog DIR` (see [Metadata resolver](#metadata-resolver)).
 
 ## Tesseract via pdf-craft
 
@@ -286,6 +292,17 @@ When neither the CLI nor the sidecar supplies a title, an offline resolver
 - **Filename template** — only a matched scraper template (confidence ≥ 0.5)
   is trusted; a bare slug stays a low-ranked candidate and a content-hash
   stem yields no candidate at all.
+- **Scrape catalogue** (`--scrape-catalog DIR`) — looks up the PDF's SHA-256
+  in every `<site>/catalog.sqlite3` under the book-scrapper data directory and
+  recovers the source page through `assets → links → pages`. The databases are
+  opened strictly **read-only** (no `-wal`/`-shm`/journal files appear next to
+  them). The page title is parsed with the same per-site template as
+  filenames; a non-empty `author` column is a trusted author value. Only the
+  title and authors are applied — publisher, published date, ISBN and source
+  URL are recorded in the `scrape.matches` block, never applied. Catalogues
+  are opened `mode=ro&immutable=1` (no side files are written), so rows the
+  scraper has not yet checkpointed from its WAL are invisible: run lookups
+  while the scraper is idle.
 - **PDF `/Info`** — `/Title` and `/Author` after junk filters (placeholders,
   numeric/UUID values, filenames in disguise) and author splitting.
 - **Cover OCR** is reserved as a *weak* corroborating signal; it never accepts
@@ -294,9 +311,18 @@ When neither the CLI nor the sidecar supplies a title, an offline resolver
 A field is accepted when a single trusted signal carries it, or when two
 signals agree. Two trusted signals that disagree make the entry `ambiguous`
 and leave that field empty (per-field: a title conflict does not clear
-authors). Volume/edition/year from the filename are recorded under
-`filename`, never applied. Raw `/Info` and the file stem are never used as a
-title fallback. `metadata.json` gains a `resolution` block and `book.json` a
+authors). Several catalogue rows are still one signal: if their parsed titles
+disagree, the scrape title is left untrusted (its candidates are kept and a
+note is recorded).
+
+**Same-site independence:** when the filename's template source is the same
+site as a catalogue record, the file was almost certainly named after that
+page. The filename then stays a candidate but is untrusted and gets no vote,
+so it cannot corroborate the scrape signal and fabricate agreement.
+
+Volume/edition/year from the filename are recorded under `filename`, never
+applied. Raw `/Info` and the file stem are never used as a title fallback.
+`metadata.json` gains a `resolution` block and `book.json` a
 `metadataResolution` block; `status` is `ok`, `ambiguous`, `empty`, or
 `not_a_book`.
 
