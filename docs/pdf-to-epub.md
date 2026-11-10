@@ -240,7 +240,7 @@ carries the fields the EPUB builder uses.
 
 | Field | Type | Notes |
 | --- | --- | --- |
-| `title`, `title_en`, `subtitle` | string | `title` falls back to the PDF filename |
+| `title`, `title_en`, `subtitle` | string | `title` falls back to the metadata resolver, then to `শিরোনামহীন` |
 | `authors` | string[] | joined for the current single-author EPUB field; the full list stays in `metadata.json` |
 | `editors`, `translators` | string[] | stored for the catalogue step |
 | `publisher`, `source_date`, `edition` | string | `source_date` keeps the printed date (e.g. `মাঘ ১৩৫৯`) |
@@ -274,9 +274,31 @@ carries the fields the EPUB builder uses.
 }
 ```
 
-Precedence: **CLI flags → sidecar → PDF `/Info` → filename → defaults**.
+Precedence: **CLI flags → sidecar → resolver (trusted filename template or vetted PDF /Info, corroborated) → `"শিরোনামহীন"` / `"অজ্ঞাত"`**.
 `cover_page` selects an explicit original page; `--cover auto|original|generate|none`
 still controls whether a cover is used or generated.
+
+### Metadata resolver
+
+When neither the CLI nor the sidecar supplies a title, an offline resolver
+(`pdf2epub/resolve.py`) reads these signals:
+
+- **Filename template** — only a matched scraper template (confidence ≥ 0.5)
+  is trusted; a bare slug stays a low-ranked candidate and a content-hash
+  stem yields no candidate at all.
+- **PDF `/Info`** — `/Title` and `/Author` after junk filters (placeholders,
+  numeric/UUID values, filenames in disguise) and author splitting.
+- **Cover OCR** is reserved as a *weak* corroborating signal; it never accepts
+  a value alone.
+
+A field is accepted when a single trusted signal carries it, or when two
+signals agree. Two trusted signals that disagree make the entry `ambiguous`
+and leave that field empty (per-field: a title conflict does not clear
+authors). Volume/edition/year from the filename are recorded under
+`filename`, never applied. Raw `/Info` and the file stem are never used as a
+title fallback. `metadata.json` gains a `resolution` block and `book.json` a
+`metadataResolution` block; `status` is `ok`, `ambiguous`, `empty`, or
+`not_a_book`.
 
 ## Conservative proofreading (opt-in)
 

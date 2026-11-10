@@ -211,6 +211,40 @@ Messages: 0 fatals / 0 errors / 0 warnings / 0 infos
 `publication.json` records `validation.epubcheck.status = "passed"` and the
 output. `pnpm typecheck` and the EPUB unit tests pass.
 
+## Step 10 — offline metadata resolver (implemented)
+
+Adopted the `bengali-book-pipeline` catalogue rules for title/author:
+
+- `pdf2epub/filename_parser.py` is vendored from
+  `catalogue/filename_parser.py` (commit `181fdb46d70a`) with its upstream
+  tests; local additions recognise the `book-scrapper/<source>/books/` layout
+  and return no candidates for content-hash filenames.
+- `pdf2epub/resolve.py` ports the `metadata_manifest` acceptance rule: a field
+  is accepted from one *trusted* signal (matched filename template, or
+  junk-filtered PDF `/Info`) or from two agreeing signals; trusted signals that
+  disagree leave the field empty and mark the entry `ambiguous`. Cover OCR is a
+  reserved weak signal. No network.
+- Precedence is CLI → sidecar → resolver → `শিরোনামহীন`/`অজ্ঞাত`. The raw
+  `/Info`, the file stem and pdf-craft's stem-derived document title are no
+  longer used as a fallback.
+- `metadata.json` always carries a `resolution` block (candidates, supporting
+  signals, rejected `/Info` values, filename volume/edition/year, and which
+  source was applied); `book.json` carries `metadataResolution`.
+
+Verified on Nishkriti 12 pages (hash filename, empty `/Info`):
+
+| Run | Resolver status | Title / author in the EPUB | EPUBCheck |
+|---|---|---|---|
+| with sidecar | `empty`, applied = sidecar | নিষ্কৃতি / শরৎচন্দ্র চট্টোপাধ্যায় | 0 errors / 0 warnings |
+| no sidecar | `empty`, warning printed | শিরোনামহীন / অজ্ঞাত (was the 64-char hash) | 0 errors / 0 warnings |
+
+Tests: 49 vendored parser tests + 19 resolver tests (filename formats,
+conflicting signals, junk `/Info`, weak cover corroboration, precedence);
+full `pdf2epub` suite 99 passed; `pnpm typecheck` and the EPUB unit tests pass.
+
+Next: cover/title-page OCR as a corroborating signal, then local catalogue and
+Wikidata lookups behind an explicit flag.
+
 ## Proofreading options measured
 
 On the same Bengali paragraph through Ollama:

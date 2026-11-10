@@ -1208,11 +1208,12 @@ def extract_with_pdfcraft(pdf: Path, out: Path, args: Any) -> tuple[BuiltBook, C
         pcex_path = recovered
 
     document = pcex_document(pcex_path)
-    title = (
-        getattr(args, "title", None)
-        or str(document.get("title") or "").strip()
-        or pdf.stem
-    )
+    # pdf-craft copies the PDF file stem into the document title; that is the
+    # filename, not evidence of a title (the resolver already vetted it).
+    pcex_title = str(document.get("title") or "").strip()
+    if pcex_title.casefold() in {pdf.stem.casefold(), pdf.name.casefold()}:
+        pcex_title = ""
+    title = getattr(args, "title", None) or pcex_title or "শিরোনামহীন"
     author = (
         getattr(args, "author", None)
         or ", ".join(str(a) for a in (document.get("authors") or []) if str(a).strip())

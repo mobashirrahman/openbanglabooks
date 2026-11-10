@@ -20,6 +20,7 @@ from .ocr import DEFAULT_MODEL, extract_ocr_pages, load_raw, pages_from_json
 from .proofread import DEFAULT_MODEL as PROOFREAD_MODEL
 from .proofread import DEFAULT_URL as OLLAMA_URL
 from .pdf import file_sha256, inspect_pdf, open_pdf
+from .resolve import apply_resolution, resolve_metadata
 from .structure import build_book
 from .textlayer import extract_text_pages
 
@@ -215,6 +216,10 @@ def _extract(args: argparse.Namespace) -> int:
         print(f"error: no such PDF: {pdf}", file=sys.stderr)
         return 2
     out = args.out.resolve()
+    # Captured before the sidecar fills args, so `apply_resolution` can tell an
+    # explicit CLI flag from a sidecar value.
+    cli_title = args.title
+    cli_author = args.author
     try:
         values, metadata_path = load_metadata(
             pdf,
@@ -237,6 +242,14 @@ def _extract(args: argparse.Namespace) -> int:
         )
         args.proofread = False
     info = inspect_pdf(pdf)
+    record = resolve_metadata(pdf, info.metadata)
+    apply_resolution(args, record, cli_title=cli_title, cli_author=cli_author)
+    if not args.title and not args.quiet:
+        print(
+            f"warning: title not resolved (status {record['status']}); "
+            "pass --title or a metadata sidecar",
+            file=sys.stderr,
+        )
     sha = file_sha256(pdf)
     if args.command == "extract" and getattr(args, "engine", "surya") == "tesseract":
         return _extract_with_pdfcraft(args, pdf, out, info, sha)
@@ -282,9 +295,8 @@ def _extract(args: argparse.Namespace) -> int:
             doc, args.cover, dpi=args.dpi, cover_page=getattr(args, "cover_page", None)
         )
         cover_sha = hashlib.sha1(decision.candidate.data).hexdigest() if decision.candidate else None
-        title = args.title or info.metadata.get("title") or pdf.stem
-        title = _clean_meta(title)
-        author = _clean_meta(args.author or info.metadata.get("author") or "অজ্ঞাত")
+        title = _clean_meta(args.title or "শিরোনামহীন")
+        author = _clean_meta(args.author or "অজ্ঞাত")
         built = build_book(
             pages,
             pdf_sha=sha,
@@ -322,6 +334,7 @@ def _extract(args: argparse.Namespace) -> int:
             cover_reason=decision.reason,
             raw_ocr=raw if args.keep_raw else None,
             metadata=getattr(args, "metadata_record", None),
+            resolution=getattr(args, "metadata_resolution", None),
         )
         if not args.quiet:
             stats = manifest["report"]["stats"]
@@ -368,6 +381,7 @@ def _extract_with_pdfcraft(args: argparse.Namespace, pdf: Path, out: Path, info,
         pipeline_name="pdf-craft",
         pipeline_version=str(built.report.get("pipeline", {}).get("version") or ""),
         metadata=getattr(args, "metadata_record", None),
+        resolution=getattr(args, "metadata_resolution", None),
     )
     if not args.quiet:
         stats = manifest["report"]["stats"]

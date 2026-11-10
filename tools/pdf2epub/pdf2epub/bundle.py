@@ -27,6 +27,7 @@ def write_bundle(
     pipeline_name: str = "pdf2epub",
     pipeline_version: str | None = None,
     metadata: dict[str, Any] | None = None,
+    resolution: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     out_dir.mkdir(parents=True, exist_ok=True)
     chapters = out_dir / "chapters"
@@ -102,8 +103,14 @@ def write_bundle(
     }
     if metadata:
         manifest["metadata"] = metadata
+    if resolution is not None:
+        manifest["metadataResolution"] = resolution
+    if metadata or resolution is not None:
+        payload: dict[str, Any] = {"metadata": metadata or {}, "resolved": book.meta}
+        if resolution is not None:
+            payload["resolution"] = resolution
         (out_dir / "metadata.json").write_text(
-            json.dumps({"metadata": metadata, "resolved": book.meta}, ensure_ascii=False, indent=2),
+            json.dumps(payload, ensure_ascii=False, indent=2),
             encoding="utf-8",
         )
     (out_dir / "book.json").write_text(json.dumps(manifest, ensure_ascii=False, indent=2), encoding="utf-8")
