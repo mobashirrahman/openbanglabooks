@@ -5,6 +5,7 @@
  * the same whitelist used by the rest of the site, assembles an EPUB 3.3 file,
  * and runs the site's structural validator before writing it.
  */
+import { createHash } from "node:crypto";
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { basename, dirname, join, resolve } from "node:path";
 import { parseArgs } from "node:util";
@@ -93,6 +94,18 @@ if (bundle.format !== "openbanglabooks-book-bundle") {
   process.exit(2);
 }
 
+// The scanned cover page often also arrives as an extracted "figure". Drop a
+// figure whose bytes are the original cover so the EPUB does not carry the
+// same multi-megabyte image twice (once as the cover, once in the frontmatter).
+const originalCover = bundle.cover.file ? safeJoin(work, bundle.cover.file) : null;
+const coverSha1 =
+  bundle.cover.kind === "original" && originalCover && existsSync(originalCover)
+    ? createHash("sha1").update(readFileSync(originalCover)).digest("hex")
+    : null;
+const coverImageFiles = new Set(
+  bundle.images.filter((image) => coverSha1 && image.sha1 === coverSha1).map((image) => image.file),
+);
+
 const meta = {
   ...bundle.meta,
   title: args.title ?? bundle.meta.title,
@@ -111,7 +124,7 @@ const sections: EpubSection[] = bundle.sections.map((s) => {
   return {
     id: s.id,
     label: s.label,
-    xhtml: sanitize(raw),
+    xhtml: stripCoverImages(sanitize(raw), coverImageFiles),
     epubType: s.epubType,
     part: s.part ?? undefined,
   };
@@ -265,6 +278,21 @@ if (args.json) {
   console.log(`  files:  ${report.entries}`);
   for (const warning of report.warnings) console.log(`  warning: ${warning}`);
   console.log(`  report: ${sidecar}`);
+}
+
+function stripCoverImages(xhtml: string, coverFiles: Set<string>): string {
+  if (!coverFiles.size) return xhtml;
+  const { document } = parseHTML(`<!doctype html><html><body><main>${xhtml}</main></body></html>`);
+  const main = document.querySelector("main");
+  if (!main) return xhtml;
+  for (const image of main.querySelectorAll("img")) {
+    const src = (image.getAttribute("src") ?? "").replace(/^\.\.\//, "");
+    if (!coverFiles.has(src)) continue;
+    const figure = image.closest("figure");
+    if (figure) figure.remove();
+    else image.remove();
+  }
+  return serializeXhtml(main as never, { allowExternalLinks: true }).trim();
 }
 
 function sanitize(raw: string): string {
