@@ -319,6 +319,19 @@ applied no edits because the crop evidence did not support them. Treat this as
 an opt-in quality pass, not a bulk default. Use a GPU-backed model, a smaller
 page range, or a faster server for whole books.
 
+Measured on the same paragraph:
+
+| Model | Time | Output | Notes |
+|---|---:|---:|---|
+| `qwen3.5:2b-q4_K_M` | 13 s | 43 tokens | fully offloaded; weaker proposals (one wrong edit); use review-only + crop verification |
+| `qwen3.5:4b-q4_K_M` | 66 s | 256 tokens (truncated) | 2.58 GB VRAM of 3.74 GB; better proposals, ~2 min for a full 512-token budget |
+
+For automatic edits, prefer an 8 GB+ GPU, a fully offloaded Vulkan llama.cpp
+server, or a remote Ollama endpoint. The client already accepts
+`--ollama-url`, and the model digest is recorded. The 2B model is useful for
+fast triage only; its proposals must stay review-only until a Bengali
+correction benchmark supports more.
+
 ## OCR model choice
 
 `datalab-to/surya-ocr-2` is the default and stays the default. The November

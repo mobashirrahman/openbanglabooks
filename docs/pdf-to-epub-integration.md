@@ -211,6 +211,20 @@ Messages: 0 fatals / 0 errors / 0 warnings / 0 infos
 `publication.json` records `validation.epubcheck.status = "passed"` and the
 output. `pnpm typecheck` and the EPUB unit tests pass.
 
+## Proofreading options measured
+
+On the same Bengali paragraph through Ollama:
+
+| Model | Time | Output | Observation |
+|---|---:|---:|---|
+| `qwen3.5:2b-q4_K_M` | 13 s | 43 tokens | fully offloaded; proposed one clearly wrong edit |
+| `qwen3.5:4b-q4_K_M` | 66 s | 256 tokens (truncated) | 2.58 GB VRAM of 3.74 GB; better proposals, ~2 min at 512 tokens |
+
+The 2B model is a fast triage/proposal generator, not an automatic editor. The
+4B model is usable with crop verification but too slow for a whole book on
+this 4 GB host. An 8 GB+ GPU, a fully offloaded Vulkan llama.cpp server, or a
+remote Ollama endpoint is the practical path for automatic edits.
+
 ## Next planned steps
 
 1. **Structure:** make `recover_structure` the default only where it demonstrably
