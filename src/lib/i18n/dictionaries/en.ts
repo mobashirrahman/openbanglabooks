@@ -343,6 +343,8 @@ const en: Dictionary = {
     continueWithGoogle: "Continue with Google",
     continueWithFacebook: "Continue with Facebook",
     providerUnavailable: "Social sign-in isn't set up on this server yet.",
+    googleCancelled: "Google sign-in was cancelled.",
+    googleFailed: "Couldn't sign you in with Google. Please try again.",
     resetTitle: "Set a new password",
     resetLead: "Choose a new password for your account.",
     newPassword: "New password",

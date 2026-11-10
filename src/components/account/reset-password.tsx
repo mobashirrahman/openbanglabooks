@@ -5,10 +5,11 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { Eye, EyeOff, Loader2 } from "lucide-react";
 import { getSupabase } from "@/lib/account/session";
+import { safeNext } from "@/lib/account/next";
 import { MIN_PASSWORD } from "@/lib/account/policy";
 import { localizedPath, type Locale } from "@/lib/i18n/config";
 import type { Dictionary } from "@/lib/i18n/dictionaries/bn";
-import { errorMessage, safeNext } from "./sign-in-form";
+import { errorMessage } from "./sign-in-form";
 
 type Labels = Dictionary["account"];
 type Phase = "checking" | "ready" | "saving" | "invalid";

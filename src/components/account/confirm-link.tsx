@@ -6,9 +6,10 @@ import { useRouter } from "next/navigation";
 import { Loader2 } from "lucide-react";
 import type { EmailOtpType } from "@supabase/supabase-js";
 import { getSupabase } from "@/lib/account/session";
+import { safeNext } from "@/lib/account/next";
 import { localizedPath, type Locale } from "@/lib/i18n/config";
 import type { Dictionary } from "@/lib/i18n/dictionaries/bn";
-import { errorMessage, safeNext } from "./sign-in-form";
+import { errorMessage } from "./sign-in-form";
 
 const TYPES: EmailOtpType[] = ["email", "magiclink", "signup", "recovery"];
 

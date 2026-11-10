@@ -95,12 +95,19 @@ In the Supabase dashboard (or `supabase/config.toml` for self-hosting):
 - **Rate limits:** the local config raises them for tests. In production keep
   the defaults or lower (e.g. 30 account emails per hour per IP) and turn on
   CAPTCHA if abuse appears.
-- **Google:** create an OAuth client in Google Cloud (authorised redirect
-  `https://<ref>.supabase.co/auth/v1/callback`), put its id and secret in
-  Supabase and enable the provider. Local sign-in needs
-  `skip_nonce_check = true`, already set in `supabase/config.toml`. The app
-  shows "Continue with Google"; if the provider is not enabled the button
-  reports that instead of leaving the site.
+- **Google:** create an OAuth client in Google Cloud. Add these authorised
+  redirect URIs:
+  - `https://<domain>/api/auth/google/callback` (first-party sign-in)
+  - `http://localhost:3000/api/auth/google/callback` for local development
+  - `https://<ref>.supabase.co/auth/v1/callback` (kept for the Supabase provider)
+
+  Put the client id and secret in Supabase (the provider is used to verify
+  Google ID tokens) and set `GOOGLE_CLIENT_ID` plus the server-only
+  `GOOGLE_CLIENT_SECRET` for the web app/Worker. Local sign-in with the
+  Supabase-hosted flow needs `skip_nonce_check = true`, already set in
+  `supabase/config.toml`. With the first-party callback, Google shows
+  `openbanglabooks.com` in the consent screen instead of the Supabase project
+  domain.
 - **Facebook:** create a Meta app with Facebook Login, add the same callback
   URL, put its id and secret in Supabase and enable the provider. In the app's
   **Basic Settings**, set **Privacy Policy URL** to

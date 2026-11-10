@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { ArrowLeft, Check, Eye, EyeOff, Loader2 } from "lucide-react";
 import { getSupabase, useAccount, accountsEnabled } from "@/lib/account/session";
 import { providerEnabled, type OAuthProvider } from "@/lib/account/providers";
+import { safeNext } from "@/lib/account/next";
 import { MIN_PASSWORD } from "@/lib/account/policy";
 import { localizedPath, type Locale } from "@/lib/i18n/config";
 import { t } from "@/lib/i18n/t";
@@ -23,12 +24,6 @@ type Step =
 const noop = () => () => {};
 const useHydrated = () => useSyncExternalStore(noop, () => true, () => false);
 const EMAIL = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-
-/** Only same-site paths: `next` comes from the URL and must never send a reader elsewhere. */
-export function safeNext(raw: string | null | undefined, fallback: string): string {
-  if (!raw || !raw.startsWith("/") || raw.startsWith("//") || raw.includes("\\")) return fallback;
-  return raw;
-}
 
 export function errorMessage(error: unknown, labels: Labels): string {
   const e = error as { status?: number; code?: string; message?: string } | null;
@@ -81,6 +76,19 @@ export function SignInForm({ locale, labels }: { locale: Locale; labels: Labels 
   useEffect(() => {
     if (accountsEnabled) void getSupabase();
   }, []);
+
+  // an error from the Google callback (?error=…): show it once, then clean the URL
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    const reason = params.get("error");
+    if (!reason) return;
+    // one-time read of the callback's URL after hydration, not a render loop
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    setError(reason === "access_denied" ? labels.googleCancelled : labels.googleFailed);
+    params.delete("error");
+    const search = params.toString();
+    window.history.replaceState(null, "", `${window.location.pathname}${search ? `?${search}` : ""}`);
+  }, [labels.googleCancelled, labels.googleFailed]);
 
   if (!accountsEnabled) return <p className="text-fg-muted">{labels.unavailable}</p>;
 
@@ -156,19 +164,30 @@ export function SignInForm({ locale, labels }: { locale: Locale; labels: Labels 
     }
   };
 
-  const continueWith = async (provider: OAuthProvider) => {
+  /** First-party OAuth: our route stores state/PKCE and sends the browser to Google. */
+  const startGoogle = () => {
+    setBusy(true);
+    setError(null);
+    const params = new URLSearchParams({ next: target(), locale });
+    // a full-page navigation is required: the server route stores the OAuth
+    // state cookie and redirects to Google
+    // eslint-disable-next-line @next/next/no-location-assign-relative-destination
+    window.location.assign(`/api/auth/google/start?${params.toString()}`);
+  };
+
+  const continueWithFacebook = async () => {
     setBusy(true);
     setError(null);
     try {
-      if (!(await providerEnabled(provider))) {
+      if (!(await providerEnabled("facebook"))) {
         setError(labels.providerUnavailable);
         setBusy(false);
         return;
       }
       const sb = await getSupabase();
-      const { error } = await sb.auth.signInWithOAuth({ provider, options: { redirectTo: confirmUrl() } });
+      const { error } = await sb.auth.signInWithOAuth({ provider: "facebook", options: { redirectTo: confirmUrl() } });
       if (error) throw error;
-      // the browser is leaving for the provider; stay busy until it does
+      // the browser is leaving for Facebook; stay busy until it does
     } catch (e) {
       setError(errorMessage(e, labels));
       setBusy(false);
@@ -226,13 +245,13 @@ export function SignInForm({ locale, labels }: { locale: Locale; labels: Labels 
           provider="google"
           label={labels.continueWithGoogle}
           disabled={busy || !hydrated}
-          onClick={() => void continueWith("google")}
+          onClick={startGoogle}
         />
         <ProviderButton
           provider="facebook"
           label={labels.continueWithFacebook}
           disabled={busy || !hydrated}
-          onClick={() => void continueWith("facebook")}
+          onClick={() => void continueWithFacebook()}
         />
       </div>
 

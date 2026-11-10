@@ -340,6 +340,8 @@ const bn = {
     continueWithGoogle: "Google দিয়ে চালিয়ে যান",
     continueWithFacebook: "Facebook দিয়ে চালিয়ে যান",
     providerUnavailable: "এই সার্ভারে সোশ্যাল সাইন ইন এখনো চালু করা হয়নি।",
+    googleCancelled: "Google সাইন ইন বাতিল করা হয়েছে।",
+    googleFailed: "Google দিয়ে সাইন ইন করা যায়নি। আবার চেষ্টা করুন।",
     resetTitle: "নতুন পাসওয়ার্ড",
     resetLead: "আপনার অ্যাকাউন্টের জন্য একটি নতুন পাসওয়ার্ড দিন।",
     newPassword: "নতুন পাসওয়ার্ড",
