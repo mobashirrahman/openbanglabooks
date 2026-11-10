@@ -71,6 +71,29 @@ Checks: `pnpm typecheck`; 23 `pdf2epub` tests; `pnpm pdf:check-ocr` (tessdata
 OK; local Tesseract 5.5.0 warns against the pinned 5.5.3). Commits:
 `4fc5c85` (duplicate cover figure) and `7b6441e` (metadata + OCR pins).
 
+## Step 2 — page and heading splitting (committed)
+
+Tesseract/pdf-craft can return one `text` paragraph whose blocks are the
+individual lines of several pages. The bridge used to join them into a single
+`<p>`, which hid paragraph boundaries and chapter headings.
+
+`_split_text_layout` now:
+
+- groups blocks by PDF page (one paragraph per page instead of one per chapter);
+- drops a trailing page-number block;
+- lifts a leading chapter marker (`এক`, `দ্বিতীয়`, `অধ্যায় ১`, …) into a title
+  paragraph before structure recovery.
+
+Verified on the same Nishkriti 12-page extract:
+
+- chapter label and nav entry are now `এক` (previously the generic `মূল পাঠ`);
+- body text is split into page-level paragraphs with page anchors;
+- 3 sections, 2197 words; the title/publisher front matter is still part of the
+  first chapter and needs a later front-matter split.
+
+Tests: `tools/pdf2epub/tests/test_pdfcraft_split.py`; full `pdf2epub` suite
+(26 tests) and `pnpm typecheck` pass.
+
 ## Next planned steps
 
 1. **Structure:** make `recover_structure` the default only where it demonstrably

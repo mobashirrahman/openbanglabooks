@@ -666,6 +666,73 @@ def _clean_chapters(chapters: list[_Chapter], book_title: str) -> list[_Chapter]
     return head + merged
 
 
+_CHAPTER_MARKER = re.compile(
+    r"^(?:"
+    r"(?:অধ্যায়|অধ্যায়|পরিচ্ছেদ|খণ্ড|খন্ড|পর্ব)\s*[০-৯0-9]{1,3}"
+    r"|[০-৯0-9]{1,3}\s*(?:অধ্যায়|অধ্যায়|পরিচ্ছেদ|খণ্ড|খন্ড|পর্ব)"
+    r"|এক|দুই|তিন|চার|পাঁচ|ছয়|সাত|আট|নয়|দশ"
+    r"|এগারো|বারো|তেরো|চৌদ্দ|পনেরো|ষোল|সতেরো|আঠারো|উনিশ|বিশ"
+    r"|প্রথম|দ্বিতীয়|দ্বিতীয়|তৃতীয়|তৃতীয়|চতুর্থ|পঞ্চম|ষষ্ঠ|সপ্তম|অষ্টম|নবম|দশম"
+    r"|[০-৯0-9]{1,3}"
+    r")$"
+)
+
+
+def _is_page_number(text: str) -> bool:
+    value = text.strip(" \t\r\n।.,;:!?—–-")
+    return bool(value) and len(value) <= 4 and all(
+        "০" <= char <= "৯" or "0" <= char <= "9" for char in value
+    )
+
+
+def _is_chapter_marker(text: str) -> bool:
+    value = " ".join(text.split()).strip(" \t\r\n।.,;:!?—–-")
+    return bool(value) and len(value) <= 40 and len(value.split()) <= 5 and bool(
+        _CHAPTER_MARKER.fullmatch(value)
+    )
+
+
+def _split_text_layout(layout: Layout) -> list[Layout]:
+    """Split one coarse paragraph into page groups and chapter headings.
+
+    pdf-craft/Tesseract can hand us a single ``text`` paragraph whose blocks
+    are the individual lines of several pages. Rendering that as one ``<p>``
+    loses every paragraph and page boundary and hides chapter headings such as
+    ``এক``. Group by page, drop a trailing page number, and lift a leading
+    chapter marker into a title paragraph. Other layout kinds are untouched.
+    """
+    if not isinstance(layout, _Paragraph) or layout.ref not in {"", "text", "letter", "quote"}:
+        return [layout]
+    if not layout.blocks:
+        return [layout]
+
+    groups: list[list[_Block]] = []
+    current: list[_Block] = []
+    current_page: int | None = None
+    for block in layout.blocks:
+        if current and block.page != current_page:
+            groups.append(current)
+            current = []
+        current.append(block)
+        current_page = block.page
+    if current:
+        groups.append(current)
+
+    out: list[Layout] = []
+    for group in groups:
+        if len(group) > 1 and _is_page_number(_plain_text(group[-1].content)):
+            group = group[:-1]
+        if not group:
+            continue
+        first = _plain_text(group[0].content).strip()
+        if len(group) > 1 and _is_chapter_marker(first):
+            out.append(_Paragraph(ref="title", level=1, blocks=[group[0]]))
+            out.append(_Paragraph(ref=layout.ref, level=layout.level, blocks=group[1:]))
+        else:
+            out.append(_Paragraph(ref=layout.ref, level=layout.level, blocks=group))
+    return out or [layout]
+
+
 def _chapter_label(chapter: _Chapter) -> str | None:
     for layout in chapter.layouts:
         if isinstance(layout, _Paragraph) and layout.ref in TITLE_TAGS:
@@ -743,6 +810,12 @@ def convert_pcex(
     with PcexArchive(pcex_path) as archive:
         documents = archive.document()
         chapters = _clean_chapters(archive.chapters(), title)
+        for chapter in chapters:
+            chapter.layouts = [
+                split
+                for layout in chapter.layouts
+                for split in _split_text_layout(layout)
+            ]
         toc_items = archive.toc()
         page_sizes = archive.pages()
 
