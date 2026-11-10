@@ -289,6 +289,54 @@ Next: rebuild the Rokomari-derived catalogue from the published dumps
 (Hugging Face `sayurio/rokomari-bd-product-data` + the RokomariBG graph) as a
 local title → author index; authors still need a second signal.
 
+## Step 12 — local Rokomari catalogue index (implemented)
+
+The old ~194k-work catalogue was built by `pdf_craft/catalogue/importers/rokomari.py`
+from the Hugging Face dump, not by scraping rokomari.com (which sits behind a
+Cloudflare challenge). It is rebuilt locally from the two published dumps:
+
+- RokomariBG (GitHub `backlashblitz/Bangla-Book-Recommendation-Dataset`):
+  books, authors, `book_to_author`, publishers, categories;
+- Hugging Face `sayurio/rokomari-bd-product-data`: only `productType == book`
+  lines and their `specification`. The top-level `authors`/`publishers`
+  fields are the site navigation menu and are ignored.
+
+`python -m pdf2epub catalogue-build` streams both into a SQLite index
+(`works`, `authors`, `meta` with input SHA-256s and counts). Summaries,
+covers and prices are not stored. Both dumps are third-party research data and
+are used only as local lookup evidence.
+
+Lookup (`catalogue-lookup`): an author is common to a title when every
+authored entry names them, or failing that, when they appear on ≥ 90% (and ≥ 3)
+of them. Rokomari files a critical study under the bare title `গোরা`, which
+otherwise empties the strict intersection. Collection titles (`গল্প সমগ্র`,
+`রচনাবলী`, …) are always ambiguous.
+
+Resolver (`--catalogue-index`): a WEAK signal. A catalogue hit corroborates a
+candidate title only when exactly one non-collection candidate is found;
+catalogue authors only corroborate another author signal and never conflict
+with a trusted one (a note is recorded).
+
+Verified (RokomariBG + the first 57% of the HF dump; the rest is still
+downloading under HF rate limiting):
+
+| | |
+|---|---|
+| works | 127,302 (BG) + 144,982 (HF partial); 67,078 author names |
+| build | 24 s, peak RSS 86 MB |
+| দেবদাস / গোরা / শ্রীকান্ত | শরৎচন্দ্র / রবীন্দ্রনাথ / শরৎচন্দ্র |
+| পথের পাঁচালী | বিভূতিভূষণ বন্দ্যোপাধ্যায় (156 entries) |
+| গল্প সমগ্র | ambiguous |
+| নিষ্কৃতি | 3 HF entries → শরৎচন্দ্র চট্টোপাধ্যায় |
+
+Nishkriti 12 pages with `--scrape-catalog` + `--catalogue-index`, no sidecar:
+title নিষ্কৃতি with signals `scrape` + `catalogue`; শরৎচন্দ্র চট্টোপাধ্যায় is
+recorded as a catalogue author candidate but not applied (it needs a second
+signal). EPUBCheck 5.4.0: 0 errors / 0 warnings. Tests: 136 `pdf2epub` tests
+pass; `pnpm typecheck` passes.
+
+Next: cover/title-page OCR as the second author signal.
+
 ## Proofreading options measured
 
 On the same Bengali paragraph through Ollama:

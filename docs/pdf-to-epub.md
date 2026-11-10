@@ -307,6 +307,24 @@ When neither the CLI nor the sidecar supplies a title, an offline resolver
   numeric/UUID values, filenames in disguise) and author splitting.
 - **Cover OCR** is reserved as a *weak* corroborating signal; it never accepts
   a value alone.
+- **Rokomari catalogue** (`--catalogue-index PATH`) — a local SQLite index
+  built from the two Rokomari research dumps (see
+  [Rokomari catalogue index](#rokomari-catalogue-index)). Up to six distinct
+  candidate titles are looked up by normalised title. A hit is a *weak*
+  corroborating title signal: it can agree with a bare filename stem, but it
+  never accepts a title alone, and it supports a title only when exactly one
+  non-collection candidate is found (two hits give no support). For the accepted title (or the best-supported
+  candidate when none is accepted) a non-ambiguous, author-bearing hit adds
+  *weak* author values. Those corroborate another author signal (filename,
+  `/Info`, scrape or cover) but are never accepted alone and never create a
+  conflict. An author is common to a title when every authored entry names
+  them, or else when they appear on at least 90% (and at least 3) of those
+  entries, which tolerates the odd mislabelled retail record. A hit whose
+  entries otherwise disagree on authors is ambiguous and is
+  ignored for authors; a collection-style title (সমগ্র, রচনাবলী, সংকলন,
+  collected works, omnibus, …) is always treated as ambiguous. Match results
+  are recorded under `catalogue`, and an unreadable index is a note, not a
+  failure.
 
 A field is accepted when a single trusted signal carries it, or when two
 signals agree. Two trusted signals that disagree make the entry `ambiguous`
@@ -325,6 +343,41 @@ applied. Raw `/Info` and the file stem are never used as a title fallback.
 `metadata.json` gains a `resolution` block and `book.json` a
 `metadataResolution` block; `status` is `ok`, `ambiguous`, `empty`, or
 `not_a_book`.
+
+### Rokomari catalogue index
+
+Two third-party research dumps can be indexed locally as lookup evidence:
+
+- **RokomariBG** — a directory of gzipped, pretty-printed JSON tables, by
+  default `~/.local/share/puthi/catalogue/rokomari-bg/` (`book.json.gz` is
+  required; `author`, `book_to_author`, `publisher` and `category` are
+  optional). A book's authors are the union of its `book_to_author` rows and
+  its own primary `author_id`.
+- **Rokomari HF** (`sayurio/rokomari-bd-product-data`) — a gzipped JSONL file,
+  by default `~/.local/share/puthi/catalogue/rokomari-hf/data.jsonl.gz`. Only
+  `productType == "book"` rows with a dict `specification` become works.
+
+**Licence caveat:** both dumps are third-party research data. They are used
+locally as lookup evidence only; the index stores just title, author display
+names, publisher, ISBN, category and source URL. Summaries, covers, prices and
+ratings are never stored or published.
+
+```bash
+python -m pdf2epub catalogue-build \
+  --rokomari-bg ~/.local/share/puthi/catalogue/rokomari-bg \
+  --rokomari-hf ~/.local/share/puthi/catalogue/rokomari-hf/data.jsonl.gz \
+  --out ~/.local/share/puthi/catalogue/index.sqlite3
+```
+
+The default location is `~/.local/share/puthi/catalogue/index.sqlite3`; pass
+it to extraction with `--catalogue-index PATH` (or the TypeScript wrapper's
+`--catalogue-index PATH`). Lookups are read-only (`mode=ro&immutable=1`) and
+never create side files.
+
+**Navigation-menu trap:** in the HF dump, the top-level `authors` and
+`publishers` fields are the site's navigation menu — the same famous names on
+every page. They are never read. Only the `Author`, `Publisher`, `Title`,
+`ISBN` and `Category` keys inside `specification` are evidence.
 
 ## Conservative proofreading (opt-in)
 

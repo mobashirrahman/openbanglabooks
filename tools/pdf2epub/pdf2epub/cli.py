@@ -7,6 +7,7 @@ import hashlib
 import importlib.metadata
 import json
 import re
+import sqlite3
 import subprocess
 import sys
 from pathlib import Path
@@ -64,6 +65,13 @@ def _common(parser: argparse.ArgumentParser) -> None:
         type=Path,
         help="book-scrapper data dir; look up this PDF's SHA-256 in <site>/catalog.sqlite3 (read-only)",
     )
+    parser.add_argument(
+        "--catalogue-index",
+        dest="catalogue_index",
+        type=Path,
+        default=None,
+        help="Rokomari catalogue SQLite index; corroborate titles/authors (read-only)",
+    )
     parser.add_argument("--quiet", action="store_true")
 
 
@@ -104,6 +112,15 @@ def _parser() -> argparse.ArgumentParser:
     chk.add_argument("--tessdata", type=Path, help="tessdata directory containing ben.traineddata")
     chk.add_argument("--json", action="store_true")
     chk.add_argument("--strict", action="store_true", help="exit 1 on any missing or unpinned engine")
+
+    cbuild = sub.add_parser("catalogue-build", help="build the local Rokomari lookup index (SQLite)")
+    cbuild.add_argument("--rokomari-bg", type=Path, help="RokomariBG dataset directory (gzipped JSON tables)")
+    cbuild.add_argument("--rokomari-hf", type=Path, help="Rokomari HF dataset file (data.jsonl.gz)")
+    cbuild.add_argument("--out", type=Path, required=True, help="output SQLite index")
+
+    clookup = sub.add_parser("catalogue-lookup", help="look up a title in the local catalogue index")
+    clookup.add_argument("title", help="title to look up")
+    clookup.add_argument("--index", type=Path, required=True, help="catalogue SQLite index")
     return p
 
 
@@ -113,6 +130,10 @@ def main(argv: list[str] | None = None) -> int:
         return _inspect(args)
     if args.command == "check-ocr":
         return _check_ocr(args)
+    if args.command == "catalogue-build":
+        return _catalogue_build(args)
+    if args.command == "catalogue-lookup":
+        return _catalogue_lookup(args)
     if args.command in {"extract", "import-ocr"}:
         return _extract(args)
     return 2
@@ -216,6 +237,56 @@ def _check_ocr(args: argparse.Namespace) -> int:
     return 0 if not (args.strict and failed) else 1
 
 
+def _catalogue_build(args: argparse.Namespace) -> int:
+    """Build the local Rokomari lookup index and print a short summary."""
+    if args.rokomari_bg is None and args.rokomari_hf is None:
+        print(
+            "error: catalogue-build needs --rokomari-bg and/or --rokomari-hf",
+            file=sys.stderr,
+        )
+        return 2
+    from .catalogue_index import build_index
+
+    try:
+        meta = build_index(
+            args.out, rokomari_bg=args.rokomari_bg, rokomari_hf=args.rokomari_hf
+        )
+    except (OSError, ValueError, sqlite3.Error) as exc:
+        print(f"error: catalogue build failed: {exc}", file=sys.stderr)
+        return 2
+
+    counts = meta["counts"]
+    bg_works = counts.get("rokomari-bg", {}).get("works", 0)
+    hf_works = counts.get("rokomari-hf", {}).get("works", 0)
+    print(f"works: {meta['works']} (rokomari-bg {bg_works}, rokomari-hf {hf_works})")
+    print(f"authors: {meta['authors']}")
+    for source in ("rokomari-bg", "rokomari-hf"):
+        values = counts.get(source)
+        if values is None:
+            continue
+        print(
+            f"{source}: skipped {values['skipped']}, "
+            f"malformed {values['malformed']}, duplicates {values['duplicates']}"
+        )
+    for note in meta["notes"]:
+        print(f"note: {note}")
+    print(f"index: {meta['index']}")
+    return 0
+
+
+def _catalogue_lookup(args: argparse.Namespace) -> int:
+    """Print one catalogue lookup as JSON."""
+    from .catalogue_index import lookup_title
+
+    try:
+        result = lookup_title(args.index, args.title)
+    except (OSError, sqlite3.Error) as exc:
+        print(f"error: {exc}", file=sys.stderr)
+        return 2
+    print(json.dumps(result, ensure_ascii=False, indent=2))
+    return 0
+
+
 def _extract(args: argparse.Namespace) -> int:
     pdf = args.pdf.resolve()
     if not pdf.exists():
@@ -266,7 +337,16 @@ def _extract(args: argparse.Namespace) -> int:
         )
         args.proofread = False
     info = inspect_pdf(pdf)
-    record = resolve_metadata(pdf, info.metadata, scrape=scrape_records)
+    catalogue_index = getattr(args, "catalogue_index", None)
+    if catalogue_index is not None and not catalogue_index.exists():
+        print(f"warning: catalogue index not found: {catalogue_index}", file=sys.stderr)
+        catalogue_index = None
+    record = resolve_metadata(
+        pdf,
+        info.metadata,
+        scrape=scrape_records,
+        catalogue_index=catalogue_index,
+    )
     apply_resolution(args, record, cli_title=cli_title, cli_author=cli_author)
     if not args.title and not args.quiet:
         print(

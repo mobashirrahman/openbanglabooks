@@ -5,7 +5,9 @@ Precision over recall: an omitted title falls back to a visible
 An accepted value therefore needs a *trusted* signal -- a matched filename
 template (confidence >= 0.5) or a junk-filtered PDF ``/Info`` value -- or
 corroboration from two independent signals. Trusted signals that disagree
-produce ``status="ambiguous"`` with no value instead of a guess.
+produce ``status="ambiguous"`` with no value instead of a guess. The local
+Rokomari catalogue index is the one *weak* signal that may only corroborate:
+it never accepts a field alone and never creates a conflict.
 
 ``status`` is one of:
 
@@ -24,6 +26,7 @@ wrong volume is worse than no volume.
 from __future__ import annotations
 
 import re
+import sqlite3
 import string
 import unicodedata
 from pathlib import Path
@@ -33,13 +36,17 @@ from .filename_parser import parse_filename, parse_source_title
 
 __all__ = ["RESOLVER", "resolve_metadata", "apply_resolution"]
 
-RESOLVER = "pdf2epub-metadata-v1"
+RESOLVER = "pdf2epub-metadata-v2"
 
 # A filename or scraped page title only competes for acceptance when it
 # matched a scraper template.
 TRUSTED_CONFIDENCE = 0.5
 
-SIGNAL_ORDER = ("scrape", "filename", "pdf_info", "cover")
+SIGNAL_ORDER = ("scrape", "filename", "pdf_info", "cover", "catalogue")
+
+# One lookup per distinct candidate title, capped so a pathological filename
+# cannot turn resolution into a catalogue crawler.
+MAX_CATALOGUE_LOOKUPS = 6
 
 _UUID_RE = re.compile(
     r"[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}",
@@ -179,11 +186,12 @@ def _candidates(
 
 
 def _trusted_signals(signals: dict[str, list[tuple[str, bool]]]) -> list[str]:
-    """Signals that may accept a value alone (cover is weak by design)."""
+    """Signals that may accept a value alone (cover and catalogue are weak)."""
     return [
         name
         for name in SIGNAL_ORDER
-        if name != "cover" and any(trusted for _, trusted in signals.get(name, ()))
+        if name not in {"cover", "catalogue"}
+        and any(trusted for _, trusted in signals.get(name, ()))
     ]
 
 
@@ -334,12 +342,75 @@ def _scrape_evidence(
     return title_values, author_signal, block
 
 
+def _catalogue_evidence(
+    index: Path,
+    title_signals: dict[str, list[tuple[str, bool]]],
+) -> tuple[list[dict[str, Any]], dict[str, dict[str, Any]], str | None]:
+    """Look up candidate titles in the read-only index.
+
+    Returns ``(report lookups, results by title_key, error)``. A hit adds the
+    candidate title as a WEAK ``catalogue`` title signal, so it can corroborate
+    a bare filename but never accept a title by itself. Reads at most
+    ``MAX_CATALOGUE_LOOKUPS`` distinct candidate titles in signal order.
+    """
+    from .catalogue_index import lookup_title, normalize_key
+
+    titles: list[str] = []
+    seen: set[str] = set()
+    for name in SIGNAL_ORDER:
+        for value, _trusted in title_signals.get(name, ()):
+            if not str(value).strip():
+                continue
+            key = normalize_key(value)
+            if not key or key in seen:
+                continue
+            seen.add(key)
+            titles.append(value)
+            if len(titles) >= MAX_CATALOGUE_LOOKUPS:
+                break
+        if len(titles) >= MAX_CATALOGUE_LOOKUPS:
+            break
+
+    lookups: list[dict[str, Any]] = []
+    by_key: dict[str, dict[str, Any]] = {}
+    for title in titles:
+        try:
+            result = lookup_title(index, title)
+        except (OSError, sqlite3.Error) as exc:
+            return [], {}, f"{type(exc).__name__}: {exc}"
+        by_key[normalize_key(title)] = result
+        lookups.append(
+            {
+                "title": title,
+                "entries": result["entries"],
+                "authors": list(result["authors"]),
+                "ambiguous": bool(result["ambiguous"]),
+            }
+        )
+    # The catalogue may only point at ONE candidate. If two different
+    # candidate titles both exist in it (e.g. two disagreeing scrape rows),
+    # supporting both would let signal order pick the winner.
+    # A generic collection title (গল্প সমগ্র, রচনাবলী, ...) matches many books,
+    # so finding it in the catalogue says nothing about this one.
+    from .catalogue_index import _is_collection
+
+    hits = [
+        entry["title"]
+        for entry in lookups
+        if entry["entries"] >= 1 and not _is_collection(normalize_key(entry["title"]))
+    ]
+    if len(hits) == 1:
+        title_signals["catalogue"].append((hits[0], False))
+    return lookups, by_key, None
+
+
 def resolve_metadata(
     pdf_path: Path,
     pdf_info: dict[str, str],
     *,
     cover: dict | None = None,
     scrape: list[dict] | None = None,
+    catalogue_index: Path | None = None,
 ) -> dict:
     """Resolve a PDF's title/authors from offline signals (no network/OCR).
 
@@ -351,8 +422,11 @@ def resolve_metadata(
     read-only rows from the book-scrapper catalogues
     (:func:`pdf2epub.scrape_catalog.lookup_scrape_records`): only the scraped
     page title and the ``author`` column are applied, and a filename derived
-    from the same site is not counted as an independent signal. No OCR runs
-    here.
+    from the same site is not counted as an independent signal.
+    ``catalogue_index`` is the read-only Rokomari lookup index
+    (:mod:`pdf2epub.catalogue_index`): its title hits are a WEAK corroborating
+    title signal, and its authors may only corroborate another author signal.
+    No OCR runs here.
 
     The returned dict is JSON-serialisable; volume/edition/year appear only in
     the ``filename`` block and are never applied to a field.
@@ -412,27 +486,93 @@ def resolve_metadata(
         "filename": [(v, filename_trusted) for v in parsed.titles if str(v).strip()],
         "pdf_info": [(v, True) for v in info_titles],
         "cover": [(v, False) for v in cover_titles],
+        "catalogue": [],
     }
     author_signals = {
         "scrape": scrape_authors,
         "filename": [(v, filename_trusted) for v in parsed.authors if str(v).strip()],
         "pdf_info": [(v, True) for v in info_authors],
         "cover": [(v, False) for v in cover_authors],
+        "catalogue": [],
     }
     skip_support = {"filename"} if filename_dependent else frozenset()
+
+    catalogue_path = Path(catalogue_index) if catalogue_index is not None else None
+    catalogue_block: dict[str, Any] = {
+        "index": str(catalogue_path) if catalogue_path is not None else None,
+        "lookups": [],
+        "notes": [],
+    }
+    lookups_by_key: dict[str, dict[str, Any]] = {}
 
     if parsed.is_not_a_book:
         title_block = {"value": None, "candidates": [], "conflict": False, "signals": []}
         author_block = {"value": [], "candidates": [], "conflict": False, "signals": []}
         status = "not_a_book"
     else:
+        if catalogue_path is not None:
+            lookups, lookups_by_key, error = _catalogue_evidence(
+                catalogue_path, title_signals
+            )
+            catalogue_block["lookups"] = lookups
+            if sum(1 for entry in lookups if entry["entries"] >= 1) > 1:
+                catalogue_block["notes"].append(
+                    "several candidate titles exist in the catalogue; no title support given"
+                )
+            if error is not None:
+                # A missing or unreadable index is a note, never a failure.
+                title_signals["catalogue"] = []
+                lookups_by_key = {}
+                catalogue_block["notes"].append(
+                    f"catalogue index unreadable: {error}"
+                )
+
         title_candidates = _candidates(title_signals, skip_support=skip_support)
-        author_candidates = _candidates(author_signals, skip_support=skip_support)
         # A dependent filename must not vote either: the weak-signal branch of
         # the resolvers counts any two agreeing signals, so drop it there too.
         decide_titles = {**title_signals, "filename": []} if filename_dependent else title_signals
-        decide_authors = {**author_signals, "filename": []} if filename_dependent else author_signals
         title_value, title_conflict = _resolve_title(decide_titles)
+
+        # The catalogue can only corroborate authors for the title that will be
+        # accepted (or the best-supported candidate when no title is accepted).
+        if lookups_by_key:
+            from .catalogue_index import normalize_key
+
+            lookup = None
+            if title_value:
+                lookup = lookups_by_key.get(normalize_key(title_value))
+            elif title_candidates:
+                lookup = lookups_by_key.get(normalize_key(title_candidates[0]["value"]))
+            if (
+                lookup is not None
+                and lookup["entries"] >= 1
+                and not lookup["ambiguous"]
+                and lookup["authors"]
+            ):
+                catalogue_authors = [str(name) for name in lookup["authors"]]
+                for name in catalogue_authors:
+                    author_signals["catalogue"].append((name, False))
+                trusted_values = [
+                    value
+                    for name in _trusted_signals(author_signals)
+                    for value, ok in author_signals[name]
+                    if ok
+                ]
+                if trusted_values:
+                    trusted_keys = {_normalize(value) for value in trusted_values}
+                    catalogue_keys = {normalize_key(name) for name in catalogue_authors}
+                    if not (trusted_keys & catalogue_keys):
+                        # Weak evidence never conflicts: keep the trusted value.
+                        catalogue_block["notes"].append(
+                            "catalogue authors disagree with a trusted signal; ignored"
+                        )
+            elif lookup is not None and lookup["ambiguous"]:
+                catalogue_block["notes"].append(
+                    "catalogue authors are ambiguous for the matched title; ignored"
+                )
+
+        author_candidates = _candidates(author_signals, skip_support=skip_support)
+        decide_authors = {**author_signals, "filename": []} if filename_dependent else author_signals
         author_value, author_conflict = _resolve_authors(decide_authors)
         title_block = {
             "value": title_value,
@@ -467,6 +607,7 @@ def resolve_metadata(
             "rejected": rejected,
         },
         "scrape": scrape_block,
+        "catalogue": catalogue_block,
     }
 
 

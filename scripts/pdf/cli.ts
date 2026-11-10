@@ -32,6 +32,7 @@ const { values: args, positionals } = parseArgs({
     tessdata: { type: "string" },
     metadata: { type: "string" },
     "scrape-catalog": { type: "string" },
+    "catalogue-index": { type: "string" },
     "pdfcraft-recover-structure": { type: "boolean", default: false },
     proofread: { type: "boolean", default: false },
     "review-only": { type: "boolean", default: false },
@@ -88,7 +89,7 @@ if (!input) {
   console.error(
     "usage: pnpm pdf:epub -- input.pdf [--out dist/book.epub] [--engine surya|tesseract] " +
       "[--ocr auto|always|never] [--cover auto|original|generate|none] " +
-      "[--scrape-catalog DIR]",
+      "[--scrape-catalog DIR] [--catalogue-index PATH]",
   );
   process.exit(2);
 }
@@ -123,6 +124,7 @@ if (args["pdfcraft-language"]) extractArgs.push("--pdfcraft-language", args["pdf
 if (args.tessdata) extractArgs.push("--tessdata", resolve(args.tessdata));
 if (args.metadata) extractArgs.push("--metadata", resolve(args.metadata));
 if (args["scrape-catalog"]) extractArgs.push("--scrape-catalog", resolve(args["scrape-catalog"]));
+if (args["catalogue-index"]) extractArgs.push("--catalogue-index", resolve(args["catalogue-index"]));
 if (args["pdfcraft-recover-structure"]) extractArgs.push("--pdfcraft-recover-structure");
 if (args.proofread) extractArgs.push("--proofread");
 if (args["review-only"]) extractArgs.push("--review-only");

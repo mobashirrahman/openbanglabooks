@@ -4,9 +4,13 @@ from __future__ import annotations
 
 import argparse
 import json
+import sqlite3
+from contextlib import closing
+from pathlib import Path
 
 import pytest
 
+from pdf2epub.catalogue_index import normalize_key
 from pdf2epub.resolve import apply_resolution, resolve_metadata
 
 HASH = "a" * 64
@@ -284,3 +288,198 @@ def test_same_site_filename_cannot_rescue_untrusted_scrape_titles():
     )
     assert record["title"]["value"] is None
     assert record["status"] == "empty"
+
+
+# ---------------------------------------------------------------------------
+# Rokomari catalogue signal
+# ---------------------------------------------------------------------------
+
+CATALOGUE_TITLE = "দেবদাস"
+CATALOGUE_AUTHOR = "শরৎচন্দ্র চট্টোপাধ্যায়"
+
+_CATALOGUE_SCHEMA = """
+CREATE TABLE works (
+  source TEXT NOT NULL, source_id TEXT NOT NULL, title TEXT,
+  title_key TEXT NOT NULL, authors TEXT, author_keys TEXT,
+  publisher TEXT, isbn TEXT, category TEXT, url TEXT,
+  UNIQUE(source, source_id)
+);
+CREATE TABLE authors (author_key TEXT PRIMARY KEY, display TEXT, works INTEGER);
+CREATE TABLE meta (key TEXT PRIMARY KEY, value TEXT);
+CREATE INDEX works_title_key ON works(title_key);
+"""
+
+
+def _catalogue_index(
+    tmp_path: Path,
+    *,
+    title: str = CATALOGUE_TITLE,
+    author: str = CATALOGUE_AUTHOR,
+) -> Path:
+    """Minimal index in the production schema, containing one work."""
+    path = tmp_path / "catalogue.sqlite3"
+    author_key = normalize_key(author)
+    with closing(sqlite3.connect(path)) as conn:
+        conn.executescript(_CATALOGUE_SCHEMA)
+        conn.execute(
+            "INSERT INTO works (source, source_id, title, title_key, authors, "
+            "author_keys, publisher, isbn, category, url) "
+            "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+            (
+                "rokomari-bg",
+                "101",
+                title,
+                normalize_key(title),
+                json.dumps([author], ensure_ascii=False),
+                json.dumps([author_key], ensure_ascii=False),
+                None,
+                None,
+                None,
+                "https://example.test/101",
+            ),
+        )
+        conn.execute(
+            "INSERT INTO authors (author_key, display, works) VALUES (?, ?, 1)",
+            (author_key, author),
+        )
+        conn.commit()
+    return path
+
+
+def test_catalogue_hit_corroborates_untrusted_filename_stem(tmp_path):
+    index = _catalogue_index(tmp_path)
+
+    record = resolve_metadata(
+        Path("/tmp/দেবদাস.pdf"), {}, catalogue_index=index
+    )
+
+    assert record["status"] == "ok"
+    assert record["title"]["value"] == CATALOGUE_TITLE
+    assert record["title"]["signals"] == ["filename", "catalogue"]
+    assert record["title"]["conflict"] is False
+    assert record["catalogue"]["index"] == str(index)
+    assert record["catalogue"]["lookups"] == [
+        {
+            "title": CATALOGUE_TITLE,
+            "entries": 1,
+            "authors": [CATALOGUE_AUTHOR],
+            "ambiguous": False,
+        }
+    ]
+    json.dumps(record)  # must stay serialisable
+
+
+def test_catalogue_authors_are_not_accepted_alone(tmp_path):
+    index = _catalogue_index(tmp_path)
+
+    record = resolve_metadata(
+        Path("/tmp/দেবদাস.pdf"), {}, catalogue_index=index
+    )
+
+    assert record["authors"]["value"] == []
+    assert record["authors"]["conflict"] is False
+    assert any(
+        candidate["value"] == CATALOGUE_AUTHOR
+        and candidate["signal"] == "catalogue"
+        and candidate["trusted"] is False
+        for candidate in record["authors"]["candidates"]
+    )
+
+
+def test_catalogue_authors_corroborate_a_matching_cover(tmp_path):
+    index = _catalogue_index(tmp_path)
+
+    record = resolve_metadata(
+        Path("/tmp/দেবদাস.pdf"),
+        {},
+        cover={"authors": [CATALOGUE_AUTHOR]},
+        catalogue_index=index,
+    )
+
+    assert record["authors"]["value"] == [CATALOGUE_AUTHOR]
+    assert record["authors"]["conflict"] is False
+    assert set(record["authors"]["signals"]) >= {"catalogue", "cover"}
+    assert record["status"] == "ok"
+
+
+def test_catalogue_does_not_disturb_a_trusted_scrape_title(tmp_path):
+    index = _catalogue_index(tmp_path)
+
+    record = resolve_metadata(
+        f"/x/{HASH}.pdf", {}, scrape=[_scrape()], catalogue_index=index
+    )
+
+    assert record["title"]["value"] == "নিষ্কৃতি"
+    assert record["title"]["signals"] == ["scrape"]
+    assert record["catalogue"]["index"] == str(index)
+    assert record["catalogue"]["lookups"][0]["entries"] == 0
+
+
+def test_catalogue_authors_never_conflict_with_a_trusted_author(tmp_path):
+    index = _catalogue_index(tmp_path)
+
+    record = resolve_metadata(
+        Path("/tmp/দেবদাস.pdf"),
+        {"author": "সম্পূর্ণ অন্য লেখক"},
+        catalogue_index=index,
+    )
+
+    assert record["title"]["value"] == CATALOGUE_TITLE
+    assert record["authors"]["value"] == ["সম্পূর্ণ অন্য লেখক"]
+    assert record["authors"]["conflict"] is False
+    assert record["status"] == "ok"
+    assert any("disagree" in note for note in record["catalogue"]["notes"])
+
+
+def test_missing_catalogue_index_is_a_note_not_a_failure(tmp_path):
+    missing = tmp_path / "missing.sqlite3"
+
+    record = resolve_metadata(
+        "/x/book.pdf", {"title": "শিরোনাম"}, catalogue_index=missing
+    )
+
+    assert not missing.exists()
+    assert record["status"] == "ok"
+    assert record["title"]["value"] == "শিরোনাম"
+    assert record["catalogue"]["index"] == str(missing)
+    assert record["catalogue"]["lookups"] == []
+    assert record["catalogue"]["notes"]
+    assert "unreadable" in record["catalogue"]["notes"][0]
+
+
+def test_no_catalogue_index_keeps_an_empty_block():
+    record = resolve_metadata("/tmp/gitanjali.pdf", {})
+
+    assert record["catalogue"] == {"index": None, "lookups": [], "notes": []}
+    assert record["status"] == "empty"
+
+
+def test_catalogue_cannot_pick_between_two_candidate_titles(tmp_path):
+    """Two disagreeing scrape rows that both exist in the catalogue stay unresolved."""
+    index = _catalogue_index(tmp_path, title="নিষ্কৃতি")
+    with closing(sqlite3.connect(index)) as conn:
+        conn.execute(
+            "INSERT INTO works (source, source_id, title, title_key, authors, author_keys) "
+            "VALUES ('rokomari-bg', '102', 'ভিন্ন', ?, '[]', '[]')",
+            (normalize_key("ভিন্ন"),),
+        )
+        conn.commit()
+    other = "ভিন্ন বাংলা বই পিডিএফ ডাউনলোড| Different Bengali Book PDF Download"
+    record = resolve_metadata(
+        f"/x/{HASH}.pdf",
+        {},
+        scrape=[
+            _scrape(),
+            _scrape(page_url="https://granthagara.com/boi/other/", page_title=other),
+        ],
+        catalogue_index=index,
+    )
+    assert record["title"]["value"] is None
+    assert any("several candidate titles" in n for n in record["catalogue"]["notes"])
+
+
+def test_collection_title_gets_no_catalogue_support(tmp_path):
+    index = _catalogue_index(tmp_path, title="গল্প সমগ্র")
+    record = resolve_metadata(Path("/tmp/গল্প সমগ্র.pdf"), {}, catalogue_index=index)
+    assert record["title"]["value"] is None
+    assert record["catalogue"]["lookups"][0]["entries"] == 1
