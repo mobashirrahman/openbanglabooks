@@ -66,3 +66,6 @@ __pycache__/
 
 .vinext/
 .cloudflare/
+
+# temporary deploy secrets (see docs/deploy-cloudflare.md)
+secrets.env
