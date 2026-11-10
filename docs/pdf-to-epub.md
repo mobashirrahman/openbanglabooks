@@ -50,7 +50,15 @@ The bundle→EPUB stage is deterministic for the same inputs, including the cove
   `scripts/pdf/cli.ts` uses `tools/pdf2epub/.venv/bin/python` when it exists,
   otherwise `python3`. Override with `PDF2EPUB_PYTHON=/path/to/python`.
 
-OCR is optional. To use Surya:
+OCR is optional, but the pipeline is pinned to the two engines measured in the
+November 2026 Bengali benchmark:
+
+| Engine | Pin | Measured result on 50 Bengali block crops |
+| --- | --- | --- |
+| **Surya 2** (default) | `datalab-to/surya-ocr-2`, `surya-ocr` 0.22.x | 80.1% word accuracy, 19.9% WER, 5.8 s/crop (4 GB GPU) |
+| **Tesseract** (CPU) | 5.5.3 + `tessdata_best` `ben` md5 `6e997a9bc0f9dffc3431a0b16ca856ea` | 74.3% word accuracy, 25.7% WER, 0.3 s/crop |
+
+Install Surya 2:
 
 ```bash
 tools/pdf2epub/.venv/bin/pip install -e 'tools/pdf2epub[surya]'
@@ -59,6 +67,36 @@ tools/pdf2epub/.venv/bin/pip install -e 'tools/pdf2epub[surya]'
 Surya 2.x needs an inference backend: vLLM on NVIDIA (Docker), or llama.cpp on
 CPU/Apple Silicon. The model manager starts a server on first use. Point it at
 an already-running server with `SURYA_INFERENCE_URL=http://host:port/v1`.
+
+Tesseract 5.5.3 and the pinned Bengali model:
+
+```bash
+# The exact binary; apt may ship an older Tesseract.
+conda create -n pdf-ocr -c conda-forge tesseract=5.5.3
+conda activate pdf-ocr
+
+# tessdata_best, pinned by commit and checksum.
+mkdir -p tessdata
+curl -L -o tessdata/ben.traineddata \
+  https://raw.githubusercontent.com/tesseract-ocr/tessdata_best/9ddc24e750eec0994223a9edc3fcb434a2244f3b/ben.traineddata
+echo "6e997a9bc0f9dffc3431a0b16ca856ea  tessdata/ben.traineddata" | md5sum -c -
+```
+
+Then verify the whole OCR stack:
+
+```bash
+pnpm pdf:check-ocr --tesseract "$(which tesseract)" --tessdata tessdata
+```
+
+`pnpm pdf:check-ocr` prints the Surya model, the `surya-ocr` version, the
+Tesseract version and the `ben.traineddata` checksum. Add `--strict` to fail on
+any mismatch.
+
+> **Historical note:** the 2026-09-11 paper run recorded
+> `ben@4ded8631c91f`. That hash is **`tessdata_fast`**, not `tessdata_best`
+> (despite what the old docs said). On the same 50 crops, fast scored 67.4%
+> word accuracy vs 74.3% for best. Keep `tessdata_best` as the default; use
+> `tessdata_fast` only to reproduce the old run.
 
 ## Two OCR backends
 
@@ -73,6 +111,9 @@ There are exactly two OCR paths, and both produce the same book bundle:
 ## Commands
 
 ```bash
+# Verify the pinned OCR engines (Surya 2, Tesseract 5.5.3, tessdata_best)
+pnpm pdf:check-ocr --tessdata tessdata
+
 # What is in this PDF, and which path would be used?
 pnpm pdf:epub -- book.pdf --inspect
 
@@ -82,7 +123,7 @@ pnpm pdf:epub -- book.pdf --out dist/book.epub
 # Surya OCR for a scanned book
 pnpm pdf:epub -- book.pdf --engine surya --ocr always --out dist/book.epub
 
-# A/B two Surya checkpoints on a few pages first
+# Optional: A/B Surya 2 and 2.5 on a few pages of one book
 pnpm pdf:epub -- book.pdf --ocr always --max-pages 8 \
   --model datalab-to/surya-ocr-2.5 --out dist/surya25.epub
 pnpm pdf:epub -- book.pdf --ocr always --max-pages 8 \
@@ -148,8 +189,10 @@ automatically) or point to it explicitly:
 PDFCRAFT_PYTHON=/path/to/venv/bin/python pnpm pdf:craft -- book.pdf
 ```
 
-You also need Poppler (`pdftoppm`). For the Tesseract backend, install the
-`tesseract` binary and Bengali `tessdata_best` (`ben.traineddata`).
+You also need Poppler (`pdftoppm`). For the Tesseract backend, install
+Tesseract 5.5.3 and the pinned Bengali `tessdata_best` described in
+[Requirements](#requirements), then pass `--tesseract` / `--tessdata` (or
+verify with `pnpm pdf:check-ocr`).
 
 ### What survives the bridge
 
@@ -172,15 +215,63 @@ pnpm pdf:build --work .work/book --out dist/book.epub
 overrides. This is useful when tuning the generated cover or re-building after
 editing a chapter fragment by hand.
 
+## Metadata sidecar
+
+Bibliographic metadata belongs in a JSON sidecar next to the PDF
+(`book.metadata.json`) or in an explicit file passed with `--metadata`. The
+sidecar is **read, never rewritten**; CLI flags win over it. The bundle gets a
+`metadata.json` with the raw sidecar plus the resolved values, and `book.json`
+carries the fields the EPUB builder uses.
+
+| Field | Type | Notes |
+| --- | --- | --- |
+| `title`, `title_en`, `subtitle` | string | `title` falls back to the PDF filename |
+| `authors` | string[] | joined for the current single-author EPUB field; the full list stays in `metadata.json` |
+| `editors`, `translators` | string[] | stored for the catalogue step |
+| `publisher`, `source_date`, `edition` | string | `source_date` keeps the printed date (e.g. `মাঘ ১৩৫৯`) |
+| `first_published` | integer | Gregorian year for `dc:date`, not the Bengali year |
+| `subjects` | string[] | `dc:subject` |
+| `description` | string | `dc:description` |
+| `isbn`, `rights`, `license`, `license_url` | string | rights/licence are also EPUB metadata |
+| `identifier` | string | reserved for a stable ISBN/URI; recorded now |
+| `source_name`, `source_url` | string | human-readable source and canonical URL |
+| `modified` | ISO 8601 | defaults to the deterministic build date |
+| `evidence` | object | page/note provenance for each accepted field |
+
+```json
+{
+  "title": "নিষ্কৃতি",
+  "authors": ["শরৎচন্দ্র চট্টোপাধ্যায়"],
+  "publisher": "কামিনী প্রকাশনী",
+  "source_date": "মাঘ ১৩৫৯",
+  "first_published": 1953,
+  "edition": "প্রথম সংস্করণ",
+  "subjects": ["বাংলা উপন্যাস"],
+  "description": "শরৎচন্দ্র চট্টোপাধ্যায়ের নিষ্কৃতি উপন্যাসের স্ক্যান করা সংস্করণ।",
+  "rights": "Public domain",
+  "license": "Public domain",
+  "evidence": {
+    "authors": {"page": 1, "note": "title page"},
+    "publisher": {"page": 2, "note": "publisher page"}
+  }
+}
+```
+
+Precedence: **CLI flags → sidecar → PDF `/Info` → filename → defaults**.
+Cover selection is still `--cover auto|original|generate|none`; the sidecar
+cover fields will be added with the cover-resolution step.
+
 ## OCR model choice
 
-`datalab-to/surya-ocr-2` is the default. The newer
-`datalab-to/surya-ocr-2.5` exists (689M parameters, released 2026-10-29), but
-the project's Bengali benchmark measured Surya 2, not 2.5: Surya 2 base was the
-strongest historical-page engine there, and the 2.5 weights have not been
-measured on that benchmark. Convert a handful of representative pages with both
-before committing a whole book; poetry, thin paper and old letterpress are the
-cases most likely to differ.
+`datalab-to/surya-ocr-2` is the default and stays the default. The November
+2026 benchmark measured Surya 2 against Surya 2.5 on 50 Sarvam Indic OCR Bench
+Bengali crops: Surya 2 led on WER (19.9% vs 21.1%) and was ~2.4× faster; Surya
+2.5 led on mean CER (8.3% vs 9.6%) and had no tail loops (Surya 2 had two).
+They are effectively tied, so there is no measured reason to switch to 2.5 for
+Bengali. `dots.mocr` (3B) was close on word accuracy (78.0%) but ~4× slower;
+`LightOnOCR-3-4B` reached 71.6%; Tesseract reached 74.3% but is ~20× faster
+(0.3 s vs 5.8–14.2 s per crop). Keep Surya 2 for quality, Tesseract for
+throughput.
 
 `--backend vllm|llamacpp|mlx` selects the inference server. A 4 GB GPU is
 generally too small for a comfortable vLLM run; llama.cpp on CPU is slower but
@@ -234,6 +325,7 @@ Heuristics are good, not magic. Before publishing, spot-check:
 |---|---|
 | `No text layer found and --ocr never was set` | Remove `--ocr never` or run OCR elsewhere and use `--ocr-json`. |
 | `Surya is not installed` | `pip install -e 'tools/pdf2epub[surya]'` in the venv. |
+| `pnpm pdf:check-ocr` warns | Install Tesseract 5.5.3 and the pinned `tessdata_best`; the old `4ded8631c91f` hash is `tessdata_fast`, not best. |
 | `Surya OCR failed … backend is running` | Start vLLM/llama-server, or set `SURYA_INFERENCE_URL`. |
 | `pdf-craft is not installed …` | Use Python 3.11-3.13 and `pip install -e 'tools/pdf2epub[pdfcraft]'`; set `PDFCRAFT_PYTHON` if the venv is elsewhere. |
 | `pdf-craft extraction failed … tesseract` | Install the `tesseract` binary and Bengali `ben.traineddata`; pass `--tesseract` / `--tessdata`. |

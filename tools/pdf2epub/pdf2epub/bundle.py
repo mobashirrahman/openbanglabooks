@@ -26,6 +26,7 @@ def write_bundle(
     raw_ocr: dict[str, Any] | None = None,
     pipeline_name: str = "pdf2epub",
     pipeline_version: str | None = None,
+    metadata: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     out_dir.mkdir(parents=True, exist_ok=True)
     chapters = out_dir / "chapters"
@@ -99,6 +100,12 @@ def write_bundle(
         "pageList": book.page_list,
         "report": book.report,
     }
+    if metadata:
+        manifest["metadata"] = metadata
+        (out_dir / "metadata.json").write_text(
+            json.dumps({"metadata": metadata, "resolved": book.meta}, ensure_ascii=False, indent=2),
+            encoding="utf-8",
+        )
     (out_dir / "book.json").write_text(json.dumps(manifest, ensure_ascii=False, indent=2), encoding="utf-8")
 
     if raw_ocr is not None:

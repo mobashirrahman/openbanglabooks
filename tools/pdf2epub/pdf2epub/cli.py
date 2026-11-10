@@ -4,7 +4,10 @@ from __future__ import annotations
 
 import argparse
 import hashlib
+import importlib.metadata
 import json
+import re
+import subprocess
 import sys
 from pathlib import Path
 from typing import Any
@@ -12,10 +15,18 @@ from typing import Any
 from . import __version__
 from .bundle import write_bundle
 from .cover import decide_cover
+from .metadata import apply_metadata, load_metadata
 from .ocr import DEFAULT_MODEL, extract_ocr_pages, load_raw, pages_from_json
 from .pdf import file_sha256, inspect_pdf, open_pdf
 from .structure import build_book
 from .textlayer import extract_text_pages
+
+# Pins from the November 2026 Bengali benchmark (see docs/pdf-to-epub.md).
+PINNED_SURYA_MODEL = DEFAULT_MODEL
+PINNED_SURYA_OCR = "0.22.1"
+PINNED_TESSERACT = "5.5.3"
+TESSDATA_BEST_MD5 = "6e997a9bc0f9dffc3431a0b16ca856ea"
+TESSDATA_FAST_MD5 = "4ded8631c91f5d70b5c01ab4d5a671c4"
 
 
 def _common(parser: argparse.ArgumentParser) -> None:
@@ -42,6 +53,7 @@ def _common(parser: argparse.ArgumentParser) -> None:
     parser.add_argument("--cover", choices=["auto", "original", "generate", "none"], default="auto")
     parser.add_argument("--max-pages", type=int, default=0, help="limit pages (for trials)")
     parser.add_argument("--keep-raw", action="store_true", help="write raw OCR JSON into the bundle")
+    parser.add_argument("--metadata", type=Path, help="publication metadata sidecar (JSON)")
     parser.add_argument("--quiet", action="store_true")
 
 
@@ -70,6 +82,13 @@ def _parser() -> argparse.ArgumentParser:
     _common(imp)
     imp.add_argument("ocr_json", type=Path)
     imp.add_argument("--model", default=DEFAULT_MODEL)
+
+    chk = sub.add_parser("check-ocr", help="verify the pinned Surya 2 and Tesseract engines")
+    chk.add_argument("--engine", choices=["all", "surya", "tesseract"], default="all")
+    chk.add_argument("--tesseract", default="tesseract", help="tesseract executable")
+    chk.add_argument("--tessdata", type=Path, help="tessdata directory containing ben.traineddata")
+    chk.add_argument("--json", action="store_true")
+    chk.add_argument("--strict", action="store_true", help="exit 1 on any missing or unpinned engine")
     return p
 
 
@@ -77,6 +96,8 @@ def main(argv: list[str] | None = None) -> int:
     args = _parser().parse_args(argv)
     if args.command == "inspect":
         return _inspect(args)
+    if args.command == "check-ocr":
+        return _check_ocr(args)
     if args.command in {"extract", "import-ocr"}:
         return _extract(args)
     return 2
@@ -111,12 +132,94 @@ def _inspect(args: argparse.Namespace) -> int:
     return 0
 
 
+def _version_tuple(value: str) -> tuple[int, ...]:
+    return tuple(int(part) for part in re.findall(r"\d+", value)[:3])
+
+
+def _md5(path: Path) -> str:
+    digest = hashlib.md5()
+    with path.open("rb") as handle:
+        for chunk in iter(lambda: handle.read(1024 * 1024), b""):
+            digest.update(chunk)
+    return digest.hexdigest()
+
+
+def _check_ocr(args: argparse.Namespace) -> int:
+    rows: list[dict[str, Any]] = []
+    failed = False
+
+    if args.engine in {"all", "surya"}:
+        try:
+            version = importlib.metadata.version("surya-ocr")
+            expected = _version_tuple(PINNED_SURYA_OCR)[:2]
+            status = "ok" if _version_tuple(version)[:2] == expected else "warn"
+            note = f"model {PINNED_SURYA_MODEL}; measured with {PINNED_SURYA_OCR}"
+        except importlib.metadata.PackageNotFoundError:
+            version, status = None, "missing"
+            note = "pip install -e 'tools/pdf2epub[surya]'"
+        failed |= status != "ok"
+        rows.append({"engine": "surya", "status": status, "version": version, "note": note})
+
+    if args.engine in {"all", "tesseract"}:
+        try:
+            result = subprocess.run(
+                [args.tesseract, "--version"], capture_output=True, text=True, timeout=10
+            )
+            match = re.search(r"tesseract\s+(\d+\.\d+\.\d+)", result.stdout, re.I)
+            version = match.group(1) if match else None
+            status = "ok" if version == PINNED_TESSERACT else "warn"
+            note = f"pinned {PINNED_TESSERACT}"
+        except (OSError, subprocess.SubprocessError) as exc:
+            version, status = None, "missing"
+            note = f"{type(exc).__name__}: {exc}"
+        failed |= status != "ok"
+        rows.append({"engine": "tesseract", "status": status, "version": version, "note": note})
+
+        tessdata = args.tessdata or Path("tessdata")
+        traineddata = tessdata / "ben.traineddata"
+        if not traineddata.is_file():
+            status, digest = "missing", None
+            note = f"expected {traineddata}"
+        else:
+            digest = _md5(traineddata)
+            if digest == TESSDATA_BEST_MD5:
+                status, note = "ok", "tessdata_best (recommended)"
+            elif digest == TESSDATA_FAST_MD5:
+                status, note = "warn", "tessdata_fast (old paper hash; ~7 points lower word accuracy)"
+            else:
+                status, note = "warn", "unrecognised ben.traineddata"
+        failed |= status != "ok"
+        rows.append({"engine": "tessdata", "status": status, "version": digest, "note": note})
+
+    payload = {"ok": not failed, "engines": rows}
+    if args.json:
+        print(json.dumps(payload, ensure_ascii=False, indent=2))
+    else:
+        for row in rows:
+            print(f"{row['engine']}: {row['status']}  {row['version'] or '-'}  ({row['note']})")
+        print("ok" if not failed else "not pinned — see docs/pdf-to-epub.md")
+    return 0 if not (args.strict and failed) else 1
+
+
 def _extract(args: argparse.Namespace) -> int:
     pdf = args.pdf.resolve()
     if not pdf.exists():
         print(f"error: no such PDF: {pdf}", file=sys.stderr)
         return 2
     out = args.out.resolve()
+    try:
+        values, metadata_path = load_metadata(
+            pdf,
+            getattr(args, "metadata", None),
+            title=args.title,
+            authors=[args.author] if args.author else None,
+        )
+        apply_metadata(args, values)
+    except (OSError, ValueError, json.JSONDecodeError) as exc:
+        print(f"error: invalid metadata sidecar: {exc}", file=sys.stderr)
+        return 2
+    if metadata_path and not args.quiet:
+        print(f"metadata: {metadata_path}")
     info = inspect_pdf(pdf)
     sha = file_sha256(pdf)
     if args.command == "extract" and getattr(args, "engine", "surya") == "tesseract":
@@ -200,6 +303,7 @@ def _extract(args: argparse.Namespace) -> int:
             cover_mode=decision.mode,
             cover_reason=decision.reason,
             raw_ocr=raw if args.keep_raw else None,
+            metadata=getattr(args, "metadata_record", None),
         )
         if not args.quiet:
             stats = manifest["report"]["stats"]
@@ -245,6 +349,7 @@ def _extract_with_pdfcraft(args: argparse.Namespace, pdf: Path, out: Path, info,
         cover_reason=cover_reason,
         pipeline_name="pdf-craft",
         pipeline_version=str(built.report.get("pipeline", {}).get("version") or ""),
+        metadata=getattr(args, "metadata_record", None),
     )
     if not args.quiet:
         stats = manifest["report"]["stats"]

@@ -13,7 +13,9 @@ dependencies = [
 # Surya OCR 2 (the measured Bengali baseline). Install only when you need OCR:
 #   pip install -e 'tools/pdf2epub[surya]'
 # It also needs vLLM (NVIDIA) or llama.cpp (CPU / Apple Silicon); see docs/pdf-to-epub.md.
-surya = ["surya-ocr>=0.20"]
+# Measured with surya-ocr 0.22.1 + Surya 2. Keep the 2.x series; 0.23 is the
+# 2.5-era client and has not been through this pipeline's tests.
+surya = ["surya-ocr>=0.20,<0.23"]
 pdfcraft = ["pdf-craft @ git+https://github.com/mobashirrahman/pdf-craft.git"]
 dev = ["pytest>=8"]
 

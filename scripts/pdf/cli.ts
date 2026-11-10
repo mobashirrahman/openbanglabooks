@@ -30,6 +30,7 @@ const { values: args, positionals } = parseArgs({
     tesseract: { type: "string" },
     "pdfcraft-language": { type: "string" },
     tessdata: { type: "string" },
+    metadata: { type: "string" },
     "pdfcraft-recover-structure": { type: "boolean", default: false },
     dpi: { type: "string", default: "300" },
     cover: { type: "string", default: "auto" },
@@ -37,6 +38,9 @@ const { values: args, positionals } = parseArgs({
     "keep-raw": { type: "boolean", default: false },
     "max-pages": { type: "string" },
     inspect: { type: "boolean", default: false },
+    "check-ocr": { type: "boolean", default: false },
+    "check-engine": { type: "string", default: "all" },
+    strict: { type: "boolean", default: false },
     clean: { type: "boolean", default: false },
     json: { type: "boolean", default: false },
     title: { type: "string" },
@@ -58,6 +62,19 @@ const { values: args, positionals } = parseArgs({
     modified: { type: "string" },
   },
 });
+
+const nativePython =
+  process.env.PDF2EPUB_PYTHON ??
+  (existsSync(join(tools, ".venv/bin/python")) ? join(tools, ".venv/bin/python") : "python3");
+
+if (args["check-ocr"]) {
+  const checkArgs = ["-m", "pdf2epub", "check-ocr", "--engine", args["check-engine"] ?? "all"];
+  if (args.tesseract) checkArgs.push("--tesseract", args.tesseract);
+  if (args.tessdata) checkArgs.push("--tessdata", resolve(args.tessdata));
+  if (args.strict) checkArgs.push("--strict");
+  if (args.json) checkArgs.push("--json");
+  process.exit(run(nativePython, checkArgs, tools, false));
+}
 
 const input = positionals[0];
 if (!input) {
@@ -81,9 +98,6 @@ if (!existsSync(pdf)) {
 const stem = basename(pdf).replace(/\.[^.]+$/, "");
 const work = resolve(args.work ?? join(root, ".work/pdf", stem));
 const out = resolve(args.out ?? join(root, "dist", `${stem}.epub`));
-const nativePython =
-  process.env.PDF2EPUB_PYTHON ??
-  (existsSync(join(tools, ".venv/bin/python")) ? join(tools, ".venv/bin/python") : "python3");
 const python = engine === "pdf-craft" ? process.env.PDFCRAFT_PYTHON ?? nativePython : nativePython;
 
 if (args.inspect) {
@@ -99,6 +113,7 @@ if (args.backend) extractArgs.push("--backend", args.backend);
 if (args.tesseract) extractArgs.push("--tesseract", args.tesseract);
 if (args["pdfcraft-language"]) extractArgs.push("--pdfcraft-language", args["pdfcraft-language"]);
 if (args.tessdata) extractArgs.push("--tessdata", resolve(args.tessdata));
+if (args.metadata) extractArgs.push("--metadata", resolve(args.metadata));
 if (args["pdfcraft-recover-structure"]) extractArgs.push("--pdfcraft-recover-structure");
 if (args.dpi) extractArgs.push("--dpi", args.dpi);
 if (args.cover) extractArgs.push("--cover", args.cover);

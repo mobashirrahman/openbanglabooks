@@ -1,9 +1,12 @@
 """Surya OCR integration.
 
-Default model: `datalab-to/surya-ocr-2`. The newer `datalab-to/surya-ocr-2.5`
-exists, but the project's Bengali page/crop benchmark measured Surya 2: it is
-the strongest historical-page engine there, and 2.5 has not been measured on
-that benchmark. A/B a few pages before switching a whole book.
+Default model: `datalab-to/surya-ocr-2`. The project's November 2026 Bengali
+benchmark measured Surya 2 against Surya 2.5 and the current VLMs on 50
+Sarvam Indic OCR Bench crops: Surya 2 led on WER (19.9% vs 21.1%), was ~2.4x
+faster, and had the best median CER; Surya 2.5 had the better mean CER but two
+fewer catastrophic loops. They are effectively tied — there is no measured
+reason to switch to 2.5 for Bengali. `pnpm pdf:check-ocr` checks the pinned
+runtime; see `docs/pdf-to-epub.md`.
 
 Surya 2.x is served by vLLM (NVIDIA), llama.cpp (CPU / Apple Silicon), or the
 transformers backend. The manager starts the server on first use; see
