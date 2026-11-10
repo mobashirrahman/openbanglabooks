@@ -17,6 +17,7 @@
     "db:stop": "supabase stop",
     "db:reset": "supabase db reset",
     "db:test": "supabase test db",
+    "storage:usage": "tsx scripts/r2-usage.ts",
     "fonts": "tsx scripts/fonts/sync-fonts.ts",
     "brand": "tsx scripts/render/brand.ts",
     "ingest": "tsx scripts/ingest/index.ts",

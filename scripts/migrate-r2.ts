@@ -11,7 +11,7 @@
 import { createClient } from "@supabase/supabase-js";
 import { parseArgs } from "node:util";
 import { resolve } from "node:path";
-import { uploadObject } from "./lib/r2.ts";
+import { assertStorageRoom, bucketUsage, uploadObject } from "./lib/r2.ts";
 
 const root = resolve(import.meta.dirname, "..");
 
@@ -48,6 +48,7 @@ const TYPES: Record<string, string> = {
 
 let copied = 0;
 let bytesTotal = 0;
+let storedBytes = args.dry ? 0 : bucketUsage();
 for (const bucket of ["books", "covers"] as const) {
   const { data: entries, error } = await supabase.storage.from(bucket).list("", { limit: 1000 });
   if (error) {
@@ -65,7 +66,11 @@ for (const bucket of ["books", "covers"] as const) {
     const bytes = new Uint8Array(await data.arrayBuffer());
     const ext = entry.name.slice(entry.name.lastIndexOf(".") + 1).toLowerCase();
     console.log(`${args.dry ? "would copy" : "copy"} ${bucket}/${entry.name} (${bytes.byteLength} B)`);
-    if (!args.dry) uploadObject(`${bucket}/${entry.name}`, bytes, TYPES[ext] ?? "application/octet-stream");
+    if (!args.dry) {
+      assertStorageRoom(storedBytes, bytes.byteLength);
+      uploadObject(`${bucket}/${entry.name}`, bytes, TYPES[ext] ?? "application/octet-stream");
+      storedBytes += bytes.byteLength;
+    }
     copied += 1;
     bytesTotal += bytes.byteLength;
   }

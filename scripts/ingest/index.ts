@@ -11,7 +11,7 @@ import { parseArgs } from "node:util";
 import YAML from "yaml";
 import { createClient } from "@supabase/supabase-js";
 import { validateEpub } from "../../src/lib/epub/validate.ts";
-import { uploadBook } from "../lib/r2.ts";
+import { assertStorageRoom, bucketUsage, uploadBook } from "../lib/r2.ts";
 import { toAsciiDigits } from "../../src/lib/i18n/format.ts";
 import { resolveSource, qualitySummary, type SourceSpec } from "./sources.ts";
 import { cleanChapter } from "./clean.ts";
@@ -121,6 +121,7 @@ async function main() {
   const reviewedAt = new Date(manifest.reviewed.on + "T00:00:00Z").toISOString();
   const outDir = join(root, ".cache/books");
   mkdirSync(outDir, { recursive: true });
+  let storedBytes = args.dry ? 0 : bucketUsage();
 
   if (!args.dry) {
     for (const a of manifest.authors) {
@@ -210,7 +211,9 @@ async function main() {
 
     // 4. upload (content-addressed, so re-uploads are idempotent)
     const path = `${sha256}.epub`;
+    assertStorageRoom(storedBytes, bytes.byteLength);
     uploadBook(path, bytes);
+    storedBytes += bytes.byteLength;
 
     // 5. catalog rows
     const work = await upsert(

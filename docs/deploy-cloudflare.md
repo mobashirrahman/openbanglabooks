@@ -51,6 +51,12 @@ pnpm exec tsx scripts/migrate-r2.ts --dry
 pnpm exec tsx scripts/migrate-r2.ts
 ```
 
+R2 has no native bucket quota, so uploads are guarded in code: the Worker checks
+the bucket before writing, and the scripts check before each upload, refusing to
+cross **9 GiB** (the free plan covers 10 GB-month). `pnpm storage:usage` prints
+the current figure. Only changes made outside the app (dashboard uploads) bypass
+the guard.
+
 `pnpm ingest` and `pnpm pdf:publish` upload to R2 through `cf r2 objects put`;
 set `R2_BUCKET` to use a different bucket name. The reader streams
 `/api/books/<sha>` from the `BOOK_FILES` binding and falls back to Supabase for

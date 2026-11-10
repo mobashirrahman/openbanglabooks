@@ -17,7 +17,35 @@ type BookBucket = {
   ): Promise<unknown>;
   get(key: string): Promise<{ body: ReadableStream; httpEtag?: string } | null>;
   delete(key: string): Promise<void>;
+  list(options?: { cursor?: string; limit?: number }): Promise<{
+    objects: { key: string; size: number }[];
+    truncated: boolean;
+    cursor?: string;
+  }>;
 };
+
+/**
+ * Hard ceiling for everything we put in R2. The free plan covers 10 GB-month,
+ * so stop well before it: 9 GiB leaves room for measurement/rounding and for
+ * objects created outside this guard (e.g. a manual dashboard upload).
+ */
+export const R2_STORAGE_LIMIT_BYTES = 9 * 1024 ** 3;
+
+export class StorageQuotaError extends Error {
+  constructor(used: number, incoming: number) {
+    super(
+      `R2 storage quota reached: ${(used / 1024 ** 3).toFixed(2)} GiB used, ` +
+        `${(incoming / 1024 ** 3).toFixed(2)} GiB requested, limit ${(R2_STORAGE_LIMIT_BYTES / 1024 ** 3)} GiB`,
+    );
+    this.name = "StorageQuotaError";
+  }
+}
+
+export function assertStorageRoom(usedBytes: number, incomingBytes: number): void {
+  if (usedBytes + incomingBytes > R2_STORAGE_LIMIT_BYTES) {
+    throw new StorageQuotaError(usedBytes, incomingBytes);
+  }
+}
 
 export const BOOKS_PREFIX = "books";
 export const COVERS_PREFIX = "covers";
@@ -37,9 +65,23 @@ export function coverKey(path: string): string {
 export async function putBookFile(path: string, bytes: Uint8Array, contentType = "application/epub+zip"): Promise<void> {
   const files = bucket();
   if (!files) throw new Error("BOOK_FILES R2 binding is not configured");
+  assertStorageRoom(await bucketUsage(), bytes.byteLength);
   await files.put(bookKey(path), bytes, {
     httpMetadata: { contentType, cacheControl: "public, max-age=31536000, immutable" },
   });
+}
+
+export async function bucketUsage(): Promise<number> {
+  const files = bucket();
+  if (!files) return 0;
+  let total = 0;
+  let cursor: string | undefined;
+  do {
+    const page = await files.list({ cursor, limit: 1000 });
+    for (const object of page.objects) total += object.size;
+    cursor = page.truncated ? page.cursor : undefined;
+  } while (cursor);
+  return total;
 }
 
 export async function getBookFile(path: string): Promise<{ body: ReadableStream; httpEtag?: string } | null> {
