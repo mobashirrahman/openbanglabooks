@@ -245,16 +245,15 @@ otp_expiry = 3600
 # admin_email = "admin@email.com"
 # sender_name = "Admin"
 
-# Sign-in emails: one bilingual template with the code and a same-device link.
-# New readers get the "confirmation" email on their first sign-in, returning
-# readers the "magic_link" one; both carry the same code and link.
-[auth.email.template.magic_link]
-subject = "সাইন ইন কোড {{ .Token }} · OpenBanglaBooks"
-content_path = "./supabase/templates/sign-in.html"
-
+# Sign-up confirmation and password reset. Sign-in itself uses a password;
+# these are the only emails the account flow sends.
 [auth.email.template.confirmation]
-subject = "সাইন ইন কোড {{ .Token }} · OpenBanglaBooks"
-content_path = "./supabase/templates/sign-in.html"
+subject = "আপনার অ্যাকাউন্ট নিশ্চিত করুন · OpenBanglaBooks"
+content_path = "./supabase/templates/confirm-signup.html"
+
+[auth.email.template.recovery]
+subject = "পাসওয়ার্ড রিসেট · OpenBanglaBooks"
+content_path = "./supabase/templates/recovery.html"
 
 # Uncomment to customize notification email template
 # [auth.email.notification.password_changed]
@@ -343,6 +342,24 @@ url = ""
 skip_nonce_check = false
 # If enabled, it will allow the user to successfully authenticate when the provider does not return an email address.
 email_optional = false
+
+# Google and Facebook sign-up. Set the client id and secret as environment
+# variables (or in the Supabase dashboard) and enable the provider. The
+# authorised redirect URI at the provider is
+# https://<project-ref>.supabase.co/auth/v1/callback.
+[auth.external.google]
+enabled = false
+client_id = "env(SUPABASE_AUTH_EXTERNAL_GOOGLE_CLIENT_ID)"
+secret = "env(SUPABASE_AUTH_EXTERNAL_GOOGLE_SECRET)"
+redirect_uri = ""
+# Required for local sign in with Google auth.
+skip_nonce_check = true
+
+[auth.external.facebook]
+enabled = false
+client_id = "env(SUPABASE_AUTH_EXTERNAL_FACEBOOK_CLIENT_ID)"
+secret = "env(SUPABASE_AUTH_EXTERNAL_FACEBOOK_SECRET)"
+redirect_uri = ""
 
 # Allow Solana wallet holders to sign in to your project via the Sign in with Solana (SIWS) standard.
 # You can configure "web3" rate limit in the [auth.rate_limit] section and set up [auth.captcha] if self-hosting.

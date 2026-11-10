@@ -2,15 +2,17 @@ import { expect, type Page, type TestInfo } from "@playwright/test";
 
 const MAILPIT = process.env.E2E_MAILPIT_URL ?? "http://127.0.0.1:54324";
 
+/** The password every test account is created with. */
+export const PASSWORD = "reader-password-123";
 /** A fresh address per test and project, so runs never share an account. */
 export function uniqueEmail(info: TestInfo, tag = "reader") {
   const project = info.project.name.replace(/[^a-z0-9]+/gi, "-");
   return `${tag}-${project}-${Date.now().toString(36)}${Math.random().toString(36).slice(2, 6)}@example.com`.toLowerCase();
 }
 
-type Mail = { subject: string; code: string; link: string };
+type Mail = { subject: string; link: string; code?: string };
 
-/** The newest sign-in email for an address, from the local Mailpit inbox. */
+/** The newest account email for an address, from the local Mailpit inbox. */
 export async function latestEmail(email: string, after = 0, timeout = 15_000): Promise<Mail> {
   const until = Date.now() + timeout;
   while (Date.now() < until) {
@@ -19,32 +21,42 @@ export async function latestEmail(email: string, after = 0, timeout = 15_000): P
     const msg = list.messages.find((m) => Date.parse(m.Created) >= after);
     if (msg) {
       const full = (await (await fetch(`${MAILPIT}/api/v1/message/${msg.ID}`)).json()) as { HTML: string };
+      const hrefs = [...full.HTML.matchAll(/href="([^"]+)"/g)].map((m) => m[1].replaceAll("&amp;", "&"));
+      const link = hrefs.find((h) => h.includes("/auth/v1/verify") || h.includes("token_hash"));
       const code = full.HTML.match(/>\s*(\d{6})\s*</)?.[1];
-      const link = full.HTML.match(/href="([^"]*token_hash[^"]*)"/)?.[1]?.replaceAll("&amp;", "&");
-      if (code && link) return { subject: msg.Subject, code, link };
+      if (link) return { subject: msg.Subject, link, code };
     }
     await new Promise((r) => setTimeout(r, 300));
   }
-  throw new Error(`no sign-in email for ${email}`);
+  throw new Error(`no account email for ${email}`);
 }
 
-export const toBengaliDigits = (s: string) => s.replace(/\d/g, (d) => "০১২৩৪৫৬৭৮৯"[Number(d)]);
+const target = (next: string) => `/signin?next=${encodeURIComponent(next)}`;
 
-/** Signs in through the real form with the emailed code; returns the address. */
+/** Creates a fresh account through the real form; returns the address. */
 export async function signIn(page: Page, info: TestInfo, next = "/profile", tag?: string) {
   const email = uniqueEmail(info, tag);
-  await signInAs(page, email, next);
+  await signUpAs(page, email, next);
   return email;
 }
 
-/** Signs in a given address (a second device of the same reader). */
-export async function signInAs(page: Page, email: string, next = "/profile") {
-  await page.goto(`/signin?next=${encodeURIComponent(next)}`);
-  const sentAfter = Date.now() - 1000;
+/** Creates an account with the given address, ending at `next`. */
+export async function signUpAs(page: Page, email: string, next = "/profile", name = "Reader") {
+  await page.goto(target(next));
+  await page.getByRole("button", { name: "অ্যাকাউন্ট খুলুন", exact: true }).click();
+  await page.getByLabel("নাম").fill(name);
   await page.getByLabel("ইমেইল ঠিকানা").fill(email);
-  await page.getByRole("button", { name: "কোড পাঠান" }).click();
-  const mail = await latestEmail(email, sentAfter);
-  await page.getByLabel("ছয় অঙ্কের কোড").fill(mail.code);
+  await page.getByLabel("পাসওয়ার্ড", { exact: true }).fill(PASSWORD);
+  await page.getByRole("button", { name: "অ্যাকাউন্ট তৈরি করুন" }).click();
+  await page.waitForURL((u) => u.pathname === next);
+}
+
+/** Signs in a given address (a second device of the same reader). */
+export async function signInAs(page: Page, email: string, next = "/profile", password = PASSWORD) {
+  await page.goto(target(next));
+  await page.getByLabel("ইমেইল ঠিকানা").fill(email);
+  await page.getByLabel("পাসওয়ার্ড", { exact: true }).fill(password);
+  await page.getByRole("button", { name: "সাইন ইন করুন" }).click();
   await page.waitForURL((u) => u.pathname === next);
 }
 

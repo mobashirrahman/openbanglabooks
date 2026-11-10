@@ -72,28 +72,43 @@ HARDCOVER_CLIENT_SECRET=<from Hardcover>
 
 ### Accounts (Supabase Auth)
 
+Readers create an account with a name, email and password, or continue with
+Google or Facebook. Sign-in uses the email and password; a forgotten password
+is reset through an emailed link.
+
 In the Supabase dashboard (or `supabase/config.toml` for self-hosting):
 
 - **Site URL:** `https://<domain>`; **redirect URLs:** `https://<domain>/**`
-  (the sign-in link returns to `/signin/confirm` and `/en/signin/confirm`).
-- **Email template:** use `supabase/templates/sign-in.html` for both "Magic
-  link" and "Confirm signup", with the subject
-  `সাইন ইন কোড {{ .Token }} · OpenBanglaBooks`. The template shows the
-  six-digit code and links to `{{ .RedirectTo }}&token_hash={{ .TokenHash }}&type=email`.
-- **OTP length 6, expiry 1 hour.**
+  (confirmation and reset links return to `/signin/confirm` and
+  `/signin/reset`, also under `/en/…`).
+- **Email templates:** use `supabase/templates/confirm-signup.html` for
+  "Confirm signup" and `supabase/templates/recovery.html` for "Reset
+  password"; the subjects are in `supabase/config.toml`.
+- **Email confirmation:** on (recommended) means a new reader must open the
+  link before signing in; off signs them in immediately. The app handles
+  both.
+- **Passwords:** Supabase's minimum is 6; the forms ask for 8. Turn on
+  leaked-password protection in the dashboard if your plan offers it.
 - **SMTP:** Supabase's built-in mail sender is rate-limited to a few emails
   an hour; configure your own SMTP (any transactional provider) before
   launch, with SPF/DKIM for the sending domain.
 - **Rate limits:** the local config raises them for tests. In production keep
-  the defaults or lower (e.g. 30 sign-in emails per hour per IP) and turn on
+  the defaults or lower (e.g. 30 account emails per hour per IP) and turn on
   CAPTCHA if abuse appears.
-- **Google sign-in (optional, not enabled yet):** create an OAuth client in
-  Google Cloud (authorised redirect `https://<ref>.supabase.co/auth/v1/callback`),
-  enable the Google provider with its ID and secret in Supabase, then add a
-  "Continue with Google" button that calls `signInWithOAuth({ provider:
-  "google", options: { redirectTo: origin + "/signin/confirm" } })` and
-  exchange the code on that page. Nothing else changes: sync and the admin
-  only see a user id.
+- **Google:** create an OAuth client in Google Cloud (authorised redirect
+  `https://<ref>.supabase.co/auth/v1/callback`), put its id and secret in
+  Supabase and enable the provider. Local sign-in needs
+  `skip_nonce_check = true`, already set in `supabase/config.toml`. The app
+  shows "Continue with Google"; if the provider is not enabled the button
+  reports that instead of leaving the site.
+- **Facebook:** create a Meta app with Facebook Login, add the same callback
+  URL, put its id and secret in Supabase and enable the provider.
+- **Local providers:** export `SUPABASE_AUTH_EXTERNAL_GOOGLE_CLIENT_ID`,
+  `SUPABASE_AUTH_EXTERNAL_GOOGLE_SECRET`, and the two
+  `SUPABASE_AUTH_EXTERNAL_FACEBOOK_*` equivalents before `pnpm db:start`;
+  `supabase/config.toml` reads them.
+
+Nothing else changes: sync and the admin only see a user id.
 
 ### Editors
 

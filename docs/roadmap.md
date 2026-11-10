@@ -35,10 +35,11 @@ Everything is stored locally with `updatedAt` on every row, ready for sync.
 
 ## Phase 2 — personal reading (done)
 
-- **Accounts:** sign in with a six-digit code or the link in the same email
-  (Supabase Auth, Mailpit locally); no passwords. Account deletion removes
-  every personal row. Google sign-in is documented in `docs/deploy.md` but
-  not switched on (it needs OAuth keys).
+- **Accounts:** create an account with a name, email and password, or
+  continue with Google/Facebook (Supabase Auth, Mailpit locally). A forgotten
+  password is reset through an emailed link. Account deletion removes every
+  personal row. The social providers need OAuth keys, documented in
+  `docs/deploy.md`; until then the buttons say the provider isn't set up.
 - **Sync** (local-first; nothing needs an account): every write to a synced
   table lands in an outbox in the same IndexedDB transaction; `sync_push`
   (last writer wins, tombstones) runs before `sync_pull(since version)` on

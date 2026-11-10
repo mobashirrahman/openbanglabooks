@@ -151,14 +151,16 @@ lower-cased for Latin) that maps every character back to its DOM position,
 so matches become exact ranges and CFIs. Vowel signs and hasanta always count.
 
 
-## 12. Accounts: an emailed code first, the link second
+## 12. Accounts: email and password, plus Google and Facebook
 
-Readers sign in with a six-digit code from the email, typed on any device
-(Bengali digits accepted); the same email carries a link for this device.
-The link opens a client page that verifies the token in the browser, so mail
-scanners that prefetch links cannot use it up. No passwords to forget or
-leak. supabase-js loads only when a session cookie exists or on the sign-in
-page, so anonymous reading pays nothing for accounts.
+Readers create an account with a name, email and password, or continue with
+Google or Facebook. Sign-in is the email and password; a forgotten password
+is reset through an emailed link. Credentials go straight to Supabase Auth
+over HTTPS, never to our server. Social sign-in exchanges the PKCE code in
+the browser and confirmation/reset links verify their token there, so no
+session token is ever put in the address bar. supabase-js loads only when a
+session cookie exists or on the account pages, so anonymous reading pays
+nothing for accounts.
 
 ## 13. Sync: an outbox written by a Dexie middleware
 

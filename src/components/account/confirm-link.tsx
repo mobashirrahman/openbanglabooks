@@ -10,12 +10,13 @@ import { localizedPath, type Locale } from "@/lib/i18n/config";
 import type { Dictionary } from "@/lib/i18n/dictionaries/bn";
 import { errorMessage, safeNext } from "./sign-in-form";
 
-const TYPES: EmailOtpType[] = ["email", "magiclink", "signup"];
+const TYPES: EmailOtpType[] = ["email", "magiclink", "signup", "recovery"];
 
 /**
- * The link in the sign-in email. Verification happens here, in the browser,
- * rather than on a GET to the server: mail scanners that prefetch links do
- * not run scripts, so they cannot use up the one-time link.
+ * The page a confirmation or social sign-in returns to. The token is verified
+ * in the browser rather than on a GET to the server: mail scanners that
+ * prefetch links do not run scripts, so they cannot use up a one-time token.
+ * OAuth returns a PKCE code here; the same page exchanges it for a session.
  */
 export function ConfirmLink({ locale, labels }: { locale: Locale; labels: Dictionary["account"] }) {
   const router = useRouter();
@@ -26,21 +27,29 @@ export function ConfirmLink({ locale, labels }: { locale: Locale; labels: Dictio
     if (ran.current) return;
     ran.current = true;
     const params = new URLSearchParams(window.location.search);
+    const code = params.get("code");
     const tokenHash = params.get("token_hash");
     const type = params.get("type") as EmailOtpType | null;
+    const denied = params.get("error_description") ?? params.get("error");
     const next = safeNext(params.get("next"), localizedPath(locale, "/library"));
-    // the token must not linger in the address bar or the history
+    // tokens and codes must not linger in the address bar or the history
     window.history.replaceState(null, "", window.location.pathname);
     void (async () => {
       try {
-        if (!tokenHash || !type || !TYPES.includes(type)) throw { code: "otp_expired" };
+        if (denied) throw { code: "otp_expired", message: denied };
         const sb = await getSupabase();
-        const { error } = await sb.auth.verifyOtp({ token_hash: tokenHash, type });
-        if (error) throw error;
+        if (code) {
+          const { error } = await sb.auth.exchangeCodeForSession(code);
+          if (error) throw error;
+        } else if (tokenHash && type && TYPES.includes(type)) {
+          const { error } = await sb.auth.verifyOtp({ token_hash: tokenHash, type });
+          if (error) throw error;
+        } else {
+          throw { code: "otp_expired" };
+        }
         router.replace(next);
       } catch (e) {
-        const message = errorMessage(e, labels);
-        setError(message === labels.wrongCode ? labels.linkFailed : message);
+        setError(errorMessage(e, labels));
       }
     })();
   }, [locale, labels, router]);

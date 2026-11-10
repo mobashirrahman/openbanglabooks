@@ -1,6 +1,7 @@
 -- OpenBanglaBooks — reader accounts
--- Readers sign in with an emailed code or link (Supabase Auth). A profile row
--- is created for every new user by public.handle_new_user (catalog migration).
+-- Readers sign in with email and password, or with Google/Facebook (Supabase
+-- Auth). A profile row is created for every new user by public.handle_new_user
+-- (catalog migration).
 
 -- A reader can delete their own account at any time. Everything personal
 -- (profile, library, notes, positions…) references auth.users with

@@ -21,7 +21,7 @@ published, each with its source and rights basis recorded.
 | SEO: metadata, canonical, hreflang, JSON-LD, sitemap, robots, OG images | Done |
 | Security: strict nonce CSP for the reader, EPUB sanitising, RLS everywhere | Done |
 | Content: 14 verified works ingested from Bengali Wikisource | Done |
-| Accounts (emailed code or link), sync across devices, shelves, ratings, reflections, history | Done (Phase 2) |
+| Accounts (name, email and password; Google and Facebook), sync across devices, shelves, ratings, reflections, history | Done (Phase 2) |
 | Admin: works, authors, editions, validated EPUB upload, genres, collections | Done (Phase 2, editors only) |
 | Offline app (service worker, installable), your own EPUBs (device-only unless kept in the account), Goodreads import/export | Done (Phase 3) |
 | Hardcover (OAuth: shelves in and out) and Readwise (highlights out), tokens sealed on the server | Done (Phase 3, needs per-site setup: [docs/deploy.md](docs/deploy.md)) |
@@ -83,10 +83,11 @@ pnpm test:e2e --project=mobile-390          # one viewport, one engine
 pnpm db:test                                # pgTAP against the local database
 ```
 
-The account, sync and admin tests need the local Supabase stack: sign-in
-emails are read from Mailpit (http://127.0.0.1:54324), and the admin test
-uses the service-role key from `.env.local` to make its test account an
-editor and to remove the rows it created.
+The account, sync and admin tests need the local Supabase stack: account
+emails (confirmation and password reset) are read from Mailpit
+(http://127.0.0.1:54324), and the admin test uses the service-role key from
+`.env.local` to make its test account an editor and to remove the rows it
+created.
 
 To test a new build while a server is still running from `.next`, build into
 another folder and point the tests at its port:
