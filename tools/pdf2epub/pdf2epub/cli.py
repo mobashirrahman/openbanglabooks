@@ -53,6 +53,7 @@ def _common(parser: argparse.ArgumentParser) -> None:
     parser.add_argument("--modified", default="2026-01-01T00:00:00Z", help="dcterms:modified, ISO 8601")
     parser.add_argument("--dpi", type=int, default=300, help="render DPI for OCR/figures (default: 300)")
     parser.add_argument("--cover", choices=["auto", "original", "generate", "none"], default="auto")
+    parser.add_argument("--cover-page", type=int, help="1-based PDF page to use as the cover")
     parser.add_argument("--max-pages", type=int, default=0, help="limit pages (for trials)")
     parser.add_argument("--keep-raw", action="store_true", help="write raw OCR JSON into the bundle")
     parser.add_argument("--metadata", type=Path, help="publication metadata sidecar (JSON)")
@@ -277,7 +278,9 @@ def _extract(args: argparse.Namespace) -> int:
                 elif args.ocr == "auto":
                     pages, raw, ocr_model = _fill_scanned_pages(doc, pages, args)
 
-        decision = decide_cover(doc, args.cover, dpi=args.dpi)
+        decision = decide_cover(
+            doc, args.cover, dpi=args.dpi, cover_page=getattr(args, "cover_page", None)
+        )
         cover_sha = hashlib.sha1(decision.candidate.data).hexdigest() if decision.candidate else None
         title = args.title or info.metadata.get("title") or pdf.stem
         title = _clean_meta(title)

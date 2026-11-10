@@ -236,6 +236,7 @@ carries the fields the EPUB builder uses.
 | `identifier` | string | reserved for a stable ISBN/URI; recorded now |
 | `source_name`, `source_url` | string | human-readable source and canonical URL |
 | `modified` | ISO 8601 | defaults to the deterministic build date |
+| `cover_page` | integer | 1-based PDF page to use as the original cover |
 | `evidence` | object | page/note provenance for each accepted field |
 
 ```json
@@ -250,6 +251,7 @@ carries the fields the EPUB builder uses.
   "description": "শরৎচন্দ্র চট্টোপাধ্যায়ের নিষ্কৃতি উপন্যাসের স্ক্যান করা সংস্করণ।",
   "rights": "Public domain",
   "license": "Public domain",
+  "cover_page": 1,
   "evidence": {
     "authors": {"page": 1, "note": "title page"},
     "publisher": {"page": 2, "note": "publisher page"}
@@ -258,8 +260,8 @@ carries the fields the EPUB builder uses.
 ```
 
 Precedence: **CLI flags → sidecar → PDF `/Info` → filename → defaults**.
-Cover selection is still `--cover auto|original|generate|none`; the sidecar
-cover fields will be added with the cover-resolution step.
+`cover_page` selects an explicit original page; `--cover auto|original|generate|none`
+still controls whether a cover is used or generated.
 
 ## Conservative proofreading (opt-in)
 

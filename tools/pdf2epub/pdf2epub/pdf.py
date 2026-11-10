@@ -244,16 +244,23 @@ def _jpeg_bytes(im: Image.Image, quality: int = 92) -> bytes:
     return buf.getvalue()
 
 
-def extract_cover(doc: fitz.Document, dpi: int = 300) -> CoverCandidate | None:
+def extract_cover(
+    doc: fitz.Document, dpi: int = 300, page_index: int | None = None
+) -> CoverCandidate | None:
     """Find the most cover-like page in the first three pages and extract it.
 
-    The original embedded image is used when it is large enough; otherwise the
-    page is rendered at `dpi`. The result is not resized here — the TypeScript
-    cover stage crops/upscales it to the 2:3 EPUB canvas.
+    ``page_index`` (0-based) forces a specific page when the metadata sidecar
+    supplies ``cover_page``. The original embedded image is used when it is
+    large enough; otherwise the page is rendered at `dpi`. The result is not
+    resized here — the TypeScript cover stage crops/upscales it to the 2:3
+    EPUB canvas.
     """
     best: tuple[float, int, fitz.Rect, int] | None = None
     page_area_ref = 1.0
-    for i in range(min(3, len(doc))):
+    pages = [page_index] if page_index is not None else list(range(min(3, len(doc))))
+    for i in pages:
+        if i < 0 or i >= len(doc):
+            raise ValueError(f"cover_page is outside the document: {i + 1}")
         page = doc[i]
         if i == 0:
             page_area_ref = max(1.0, page.rect.width * page.rect.height)

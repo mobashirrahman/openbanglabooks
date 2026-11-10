@@ -33,7 +33,7 @@ TEXT_FIELDS = {
     "modified",
 }
 LIST_FIELDS = {"authors", "editors", "translators", "subjects"}
-INT_FIELDS = {"first_published"}
+INT_FIELDS = {"first_published", "cover_page"}
 ALLOWED = TEXT_FIELDS | LIST_FIELDS | INT_FIELDS | {"evidence"}
 
 
@@ -72,6 +72,8 @@ def load_metadata(
     for key in INT_FIELDS:
         if key in values and type(values[key]) is not int:
             raise ValueError(f"Metadata {key} must be an integer")
+    if "cover_page" in values and values["cover_page"] < 1:
+        raise ValueError("Metadata cover_page must be a positive 1-based PDF page")
     if title:
         values["title"] = title
     if authors:
@@ -93,7 +95,7 @@ def apply_metadata(args: Any, values: dict[str, Any]) -> None:
         args.author = ", ".join(values["authors"])
     for key in ("title_en", "subtitle", "author_en", "author_sort", "first_published",
                 "source_name", "source_url", "rights", "license_name", "license_url",
-                "description", "modified"):
+                "description", "modified", "cover_page"):
         sidecar_key = key
         if key == "license_name":
             sidecar_key = "license"

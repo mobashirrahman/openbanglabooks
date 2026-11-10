@@ -20,16 +20,28 @@ class CoverDecision:
     reason: str
 
 
-def decide_cover(doc: fitz.Document, mode: str = "auto", dpi: int = 300) -> CoverDecision:
+def decide_cover(
+    doc: fitz.Document,
+    mode: str = "auto",
+    dpi: int = 300,
+    cover_page: int | None = None,
+) -> CoverDecision:
     if mode not in {"auto", "original", "generate", "none"}:
         raise ValueError(f"Unknown cover mode: {mode}")
     if mode == "none":
         return CoverDecision(None, "none", "cover disabled")
     if mode == "generate":
         return CoverDecision(None, "generated", "cover generation requested")
-    candidate = extract_cover(doc, dpi=dpi)
+    candidate = extract_cover(
+        doc, dpi=dpi, page_index=(cover_page - 1) if cover_page is not None else None
+    )
     if candidate is None:
-        if mode == "original":
-            raise ValueError("No cover-like image found; use --cover auto or --cover generate")
+        if mode == "original" or cover_page is not None:
+            raise ValueError("No cover-like image found on the requested page")
         return CoverDecision(None, "generated", "no cover-like image on the first pages")
-    return CoverDecision(candidate, "original", f"image on PDF page {candidate.source_page + 1}")
+    reason = (
+        f"requested PDF page {cover_page}"
+        if cover_page is not None
+        else f"image on PDF page {candidate.source_page + 1}"
+    )
+    return CoverDecision(candidate, "original", reason)

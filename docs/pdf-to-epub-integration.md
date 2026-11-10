@@ -148,6 +148,17 @@ Verified on Nishkriti 12 pages:
 Tests: `test_pdfcraft_split.py` (front-matter split cases), full `pdf2epub`
 suite (28 tests) and `pnpm typecheck` pass.
 
+## Step 6 — explicit cover page (implemented)
+
+The metadata sidecar and `--cover-page` now select a specific 1-based PDF page
+as the original cover, using the same embedded-image/rendered-page path as the
+automatic heuristic. `--cover none|generate` still takes precedence.
+
+Verified on Nishkriti with `--cover-page 2`: the bundle records
+`sourcePage: 2`, `source: embedded`, reason `requested PDF page 2`, and the EPUB
+build uses it. The automatic page-1 cover remains the default. 30 `pdf2epub`
+tests and `pnpm typecheck` pass.
+
 ## Next planned steps
 
 1. **Structure:** make `recover_structure` the default only where it demonstrably

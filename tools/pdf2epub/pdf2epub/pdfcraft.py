@@ -24,6 +24,7 @@ from typing import Any, Iterable
 from xml.etree import ElementTree as ET
 
 from .model import CoverCandidate, ExtractedImage
+from .pdf import open_pdf
 from .structure import (
     BuiltBook,
     ImageRegistry,
@@ -1194,6 +1195,7 @@ def extract_with_pdfcraft(pdf: Path, out: Path, args: Any) -> tuple[BuiltBook, C
 
     cover = pcex_cover(pcex_path)
     requested_cover = getattr(args, "cover", "auto")
+    cover_page = getattr(args, "cover_page", None)
     if requested_cover == "none":
         cover = None
         cover_mode = "none"
@@ -1202,6 +1204,19 @@ def extract_with_pdfcraft(pdf: Path, out: Path, args: Any) -> tuple[BuiltBook, C
         cover = None
         cover_mode = "generated"
         cover_reason = "cover generation requested"
+    elif cover_page is not None:
+        from .cover import decide_cover
+
+        document = open_pdf(pdf)
+        try:
+            decision = decide_cover(
+                document, "original", dpi=int(getattr(args, "dpi", 300)), cover_page=int(cover_page)
+            )
+        finally:
+            document.close()
+        cover = decision.candidate
+        cover_mode = decision.mode
+        cover_reason = decision.reason
     elif cover is not None:
         cover_mode = "original"
         cover_reason = "cover from pdf-craft extraction"

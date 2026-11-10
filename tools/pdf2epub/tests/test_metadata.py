@@ -27,6 +27,7 @@ def _args(**overrides):
         "description": "",
         "subject": [],
         "modified": "2026-01-01T00:00:00Z",
+        "cover_page": None,
         "metadata": None,
     }
     values.update(overrides)
@@ -63,6 +64,29 @@ def test_loads_adjacent_sidecar_and_cli_wins(tmp_path):
     assert args.publisher == "প্রকাশক"
     assert args.first_published == 1953
     assert args.subject == ["উপন্যাস"]
+
+
+def test_cover_page_maps_to_args(tmp_path):
+    pdf = tmp_path / "book.pdf"
+    pdf.write_bytes(b"%PDF-1.4\n")
+    (tmp_path / "book.metadata.json").write_text(
+        json.dumps({"title": "x", "cover_page": 3}), encoding="utf-8"
+    )
+
+    values, _ = load_metadata(pdf)
+    args = _args()
+    apply_metadata(args, values)
+    assert args.cover_page == 3
+
+
+def test_cover_page_must_be_positive(tmp_path):
+    pdf = tmp_path / "book.pdf"
+    pdf.write_bytes(b"%PDF-1.4\n")
+    (tmp_path / "book.metadata.json").write_text(
+        json.dumps({"title": "x", "cover_page": 0}), encoding="utf-8"
+    )
+    with pytest.raises(ValueError, match="cover_page"):
+        load_metadata(pdf)
 
 
 def test_rejects_unknown_field(tmp_path):

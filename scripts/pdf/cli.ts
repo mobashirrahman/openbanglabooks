@@ -39,6 +39,7 @@ const { values: args, positionals } = parseArgs({
     "protected-word": { type: "string", multiple: true },
     dpi: { type: "string", default: "300" },
     cover: { type: "string", default: "auto" },
+    "cover-page": { type: "string" },
     "no-fonts": { type: "boolean", default: false },
     "keep-raw": { type: "boolean", default: false },
     "max-pages": { type: "string" },
@@ -127,6 +128,7 @@ if (args["proofread-model"]) extractArgs.push("--proofread-model", args["proofre
 for (const word of args["protected-word"] ?? []) extractArgs.push("--protected-word", word);
 if (args.dpi) extractArgs.push("--dpi", args.dpi);
 if (args.cover) extractArgs.push("--cover", args.cover);
+if (args["cover-page"]) extractArgs.push("--cover-page", args["cover-page"]);
 if (args["keep-raw"]) extractArgs.push("--keep-raw");
 if (args["max-pages"]) extractArgs.push("--max-pages", args["max-pages"]);
 for (const key of [
