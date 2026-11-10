@@ -187,6 +187,30 @@ A 2-page Nishkriti extraction with the new binary records
 `pdf-craft/tesseract 5.5.3 ben@6e997a9bc0f9` in both `book.json` and
 `publication.json`.
 
+## Step 9 — EPUBCheck gate (implemented, passing)
+
+Added `scripts/pdf/install-epubcheck.sh` / `pnpm pdf:install-epubcheck` for a
+local Temurin JRE 21 + EPUBCheck 5.4.0, and wired `pdf:build --epubcheck` to
+record the result in `publication.json`.
+
+EPUBCheck found two real bugs, now fixed:
+
+- duplicate XML ID `title` (`dc:title id="title"` collided with the title
+  section manifest item); the metadata title is now `id="main-title"`;
+- the `landmarks` TOC link pointed at `nav.xhtml`, which was not a spine item;
+  the nav is now in the spine with `linear="no"`.
+
+Re-run on the Nishkriti EPUB:
+
+```text
+EPUBCheck v5.4.0
+No errors or warnings detected.
+Messages: 0 fatals / 0 errors / 0 warnings / 0 infos
+```
+
+`publication.json` records `validation.epubcheck.status = "passed"` and the
+output. `pnpm typecheck` and the EPUB unit tests pass.
+
 ## Next planned steps
 
 1. **Structure:** make `recover_structure` the default only where it demonstrably

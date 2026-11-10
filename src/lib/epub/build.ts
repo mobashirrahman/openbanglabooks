@@ -281,6 +281,9 @@ function opfDoc(input: EpubBookInput, coverAsset?: EpubAsset): string {
     .filter((id) => id !== "cover" || coverAsset)
     .map((id) => `<itemref idref="${escapeAttr(id)}"/>`)
     .join("\n");
+  // The nav document is a valid landmark target only when it is in the spine;
+  // keep it out of the linear reading order.
+  const spineWithNav = `${spine}\n<itemref idref="nav" linear="no"/>`;
   const subjects = (meta.subjects ?? []).map((s) => `<dc:subject>${escapeText(s)}</dc:subject>`).join("\n");
   const description = meta.description ? `<dc:description>${escapeText(meta.description)}</dc:description>` : "";
   const rights = meta.license
@@ -294,8 +297,8 @@ function opfDoc(input: EpubBookInput, coverAsset?: EpubAsset): string {
 <package xmlns="http://www.idpf.org/2007/opf" version="3.0" unique-identifier="uid" xml:lang="${escapeAttr(meta.language)}" prefix="schema: http://schema.org/">
 <metadata xmlns:dc="http://purl.org/dc/elements/1.1/">
 <dc:identifier id="uid">${escapeText(meta.identifier)}</dc:identifier>
-<dc:title id="title">${escapeText(meta.title)}</dc:title>
-<meta refines="#title" property="title-type">main</meta>
+<dc:title id="main-title">${escapeText(meta.title)}</dc:title>
+<meta refines="#main-title" property="title-type">main</meta>
 ${meta.subtitle ? `<dc:title id="subtitle">${escapeText(meta.subtitle)}</dc:title><meta refines="#subtitle" property="title-type">subtitle</meta>` : ""}
 <dc:creator id="author">${escapeText(meta.author)}</dc:creator>
 <meta refines="#author" property="role" scheme="marc:relators">aut</meta>
@@ -331,7 +334,7 @@ ${coverAsset ? `<meta name="cover" content="cover-image"/>` : ""}
 ${manifest.join("\n")}
 </manifest>
 <spine toc="ncx">
-${spine}
+${spineWithNav}
 </spine>
 </package>
 `;

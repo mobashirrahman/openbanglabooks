@@ -84,6 +84,8 @@ describe("buildEpub", () => {
     expect(opf).toContain(`<itemref idref="title"/>`);
     expect(opf).toContain(`<itemref idref="c001"/>`);
     expect(opf).toContain(`<itemref idref="colophon"/>`);
+    expect(opf).toContain(`<itemref idref="nav" linear="no"/>`);
+    expect(opf).toContain(`<dc:title id="main-title">`);
     expect(opf).not.toMatch(/<spine[^>]*>\s*cover\s+title\s/);
   });
 

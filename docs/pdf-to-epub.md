@@ -373,8 +373,20 @@ next to the EPUB (`book.epub.publication.json`). It records:
 - the internal EPUB validation report, warnings, and optional EPUBCheck status.
 
 `pnpm pdf:build --epubcheck /path/to/epubcheck.jar` runs EPUBCheck as a gate
-(Java required) and records its result in `publication.json` and
-`epubcheck.txt`.
+and records its result in `publication.json` and `epubcheck.txt`. Install a
+local JRE + EPUBCheck without root:
+
+```bash
+pnpm pdf:install-epubcheck
+# prints the exact JAVA and EPUBCHECK paths
+
+PATH="$HOME/.local/share/ocr-engines/java/jdk-21.0.13+9-jre/bin:$PATH" \
+  pnpm pdf:build --work .work/pdf/book --out dist/book.epub \
+  --epubcheck "$HOME/.local/share/ocr-engines/epubcheck-5.4.0/epubcheck.jar"
+```
+
+EPUBCheck 5.4.0 passes on the Nishkriti fixture after the `dc:title` ID and
+non-linear nav spine fixes.
 
 `pnpm pdf:publish` reads the sidecar (or `--publication path`) and stores its
 validation report and revision metadata in `book_files.validation_report` and
