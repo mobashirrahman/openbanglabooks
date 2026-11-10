@@ -51,12 +51,6 @@ describe("work form", () => {
       { id: A2, role: "translator" },
     ]);
   });
-
-  it("will not record a verification without a reason", () => {
-    const r = parseWork(form({ ...work, rights_verified: "on" }));
-    expect(r.ok).toBe(false);
-    if (!r.ok) expect(r.errors.rights_basis).toBe("required");
-  });
 });
 
 describe("author, edition and genre forms", () => {

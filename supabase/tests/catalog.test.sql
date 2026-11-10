@@ -27,9 +27,9 @@ insert into public.book_files (edition_id, storage_path, sha256, bytes) values
 insert into public.genres (id, slug, name_bn, name_en) values ('c0000000-0000-0000-0000-000000000001', 't-genre', 'ধারা', 'Genre');
 
 -- ── constraints ──────────────────────────────────────────────────────────
-select throws_ok(
+select lives_ok(
   $$ update public.works set rights_basis = null where id = 'b0000000-0000-0000-0000-000000000001' $$,
-  '23514', null, 'a published work must say why it may be published');
+  'a published work may omit a rights basis');
 
 -- ── visitors ─────────────────────────────────────────────────────────────
 set local role anon;
@@ -101,10 +101,10 @@ select throws_ok(
   '22023', null, 'a work needs an author');
 
 select lives_ok(
-  format($$ select public.admin_save_work('{"id":"%s","slug":"t-new","title_bn":"নতুন বই","title_en":"New","title_latn":"n","form":"novel","status":"published","rights_basis":"author died 1900","rights_verified":true,"authors":[{"id":"a0000000-0000-0000-0000-000000000001"}]}'::jsonb) $$,
+  format($$ select public.admin_save_work('{"id":"%s","slug":"t-new","title_bn":"নতুন বই","title_en":"New","title_latn":"n","form":"novel","status":"published","authors":[{"id":"a0000000-0000-0000-0000-000000000001"}]}'::jsonb) $$,
     (select v from ids where k = 'work')),
-  'with verified rights it publishes');
-select is((select rights_verified_by from public.works where id = (select v from ids where k = 'work')), 'editor@example.com', 'the verifier is recorded');
+  'a work publishes without a rights record');
+select is((select status from public.works where id = (select v from ids where k = 'work')), 'published', 'and stays published');
 
 -- editions and files
 insert into ids values ('edition', public.admin_save_edition(format(

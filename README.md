@@ -5,8 +5,8 @@
 A digital library of Bengali literature with an immersive EPUB reader: genuine
 two-page spreads on wide screens, a single-page native-feeling reader on
 phones, local-first reading progress and bookmarks, and an indexable,
-SEO-ready public catalog. Only public-domain or openly licensed books are
-published, each with its source and rights basis recorded.
+SEO-ready public catalog. Every edition records where its text came from and,
+where it applies, its licence or rights note.
 
 ## What's in it
 
@@ -74,7 +74,7 @@ For `pnpm pdf:craft`, use Python 3.11-3.13 and add the `pdfcraft` extra; see
 ## Testing
 
 ```bash
-pnpm test                                   # unit: rights rule, sanitiser, EPUB validation, …
+pnpm test                                   # unit: sanitiser, EPUB validation, admin forms, …
 pnpm pdf:test                               # Python PDF/OCR structure tests (see docs/pdf-to-epub.md)
 pnpm build && pnpm start -p 3100 &          # production server for browser tests
 pnpm test:e2e                               # everything: 6 Chromium + 7 WebKit projects
@@ -149,7 +149,7 @@ vendor/foliate-js          EPUB engine (git submodule, pinned)
 supabase/                  migrations, seed
 scripts/                   ingestion, fonts, brand, OG rendering, PDF → EPUB, dev screenshots
 tools/pdf2epub/            Python PDF inspection, OCR, structure extraction
-content/catalog.yaml       the curated, rights-checked catalog manifest
+content/catalog.yaml       the curated catalog manifest
 docs/                      design, decisions, ingestion, deployment, roadmap
 ```
 
@@ -157,7 +157,7 @@ docs/                      design, decisions, ingestion, deployment, roadmap
 
 - [docs/design.md](docs/design.md) — brand, tokens, typography, motion
 - [docs/decisions.md](docs/decisions.md) — architecture decisions and why
-- [docs/ingestion.md](docs/ingestion.md) — adding books, the rights rule
+- [docs/ingestion.md](docs/ingestion.md) — adding books and editions
 - [docs/pdf-to-epub.md](docs/pdf-to-epub.md) — scanned PDF → EPUB, OCR models, review checklist
 - [docs/deploy.md](docs/deploy.md) — self-hosted Docker deployment
 - [docs/deploy-cloudflare.md](docs/deploy-cloudflare.md) — Cloudflare Workers (vinext) deployment

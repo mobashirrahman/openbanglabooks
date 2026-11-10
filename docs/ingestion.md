@@ -4,24 +4,17 @@ Books come from `content/catalog.yaml` and are built by `pnpm ingest`.
 
 ## The inclusion rule
 
-A work is published only when **all** of these hold:
+A work is published when its text is **complete and proofread**. Every
+transcription must cover all chapters, and every transcluded Wikisource scan
+page must have quality ≥ 3; an index reporting unproofread pages blocks the
+build.
 
-1. **Public domain in Bangladesh, India and the US.** `src/lib/rights.ts`:
-   the (latest) author died more than 60 years ago (BD/IN term), and the work
-   was first published before the US cut-off (in 2026: before 1931).
-2. **Complete and proofread text.** Every transcluded Wikisource scan page has
-   quality ≥ 3 (proofread or validated), and the scan index does not report
-   unproofread pages.
-3. **A recorded human review.** `reviewed.by` / `reviewed.on` in the manifest
-   become `rights_verified_by` / `rights_verified_at`; the database refuses
-   `published` without them (`published_requires_rights` constraint).
+Source and licence are recorded per edition (`source_name`, `source_url`,
+`license`, `attribution`) so the catalog stays traceable, but they do not gate
+publication. Editorial matter added by modern publishers (e.g. a Visva-Bharati
+appendix) is excluded with `exclude:`.
 
-This is a conservative screen, not legal advice. Translations, later editions
-with editorial apparatus, and anything uncertain need individual review.
-Editorial matter added by modern publishers (e.g. a Visva-Bharati appendix) is
-excluded with `exclude:`.
-
-### Currently excluded (checked 2026-11-04)
+### Not included yet (checked 2026-11-04)
 
 - **পথের পাঁচালী** — only 12 of 35 chapters transcluded; 167 of 235 scan pages
   unproofread on Wikisource.
@@ -35,7 +28,7 @@ When Wikisource volunteers finish a text, add it to the manifest and re-run.
 ```
 Wikisource (MediaWiki API, cached in .cache/wikisource, polite rate limit)
   → chapter list (root page links, or a "next" chain)
-  → completeness + rights gate
+  → completeness gate
   → clean (remove headers, page numbers, edit links) + whitelist XHTML serialiser
   → deterministic EPUB 3 with NCX, title page, source/licence colophon
   → structural validation (src/lib/epub/validate.ts)
@@ -90,8 +83,8 @@ pnpm pdf:epub -- scan.pdf --out dist/scan.epub \
 pnpm pdf:craft -- scan.pdf --out dist/scan.epub
 ```
 
-The same inclusion rule applies: a PDF conversion is still a candidate that
-needs the rights check and a human review before it enters the catalog. The
+A PDF conversion is still a candidate that needs a human review of the scan
+before it enters the catalog. The
 bundle records the source PDF's `sha256`, so the exact scan behind an edition is
 reproducible. See [pdf-to-epub.md](pdf-to-epub.md) for OCR model choice
 (Surya 2.5 is newer, but Surya 2 currently scores higher on Bengali), the review

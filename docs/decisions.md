@@ -58,8 +58,7 @@ reading resumes by progress fraction.
 ## 4. Catalog in Postgres from day one; pages are static
 
 Works, editions and files are separate (`supabase/migrations`), with RLS:
-anonymous reads see published rows only, writes require the editor role, and
-the database refuses to publish a work without a recorded rights basis. Pages
+anonymous reads see published rows only, writes require the editor role. Pages
 read the catalog with the anon key inside `"use cache"` functions tagged
 `catalog`, so they prerender at build time and refresh via
 `POST /api/revalidate` after ingestion or edits.
@@ -78,15 +77,15 @@ is per-request by design (CSP nonce), so its 404 streams: it is branded and
 WS Export cannot export works that lack a root page (e.g. পথের পাঁচালী), and
 we wanted one code path for cleanup, typography, attribution and
 sanitisation. The pipeline (`scripts/ingest`) fetches chapters through the
-MediaWiki API, gates on completeness and the public-domain rule, serialises
+MediaWiki API, gates on completeness, serialises
 through a whitelist, and builds deterministic EPUBs (same input, same bytes,
 same hash). Files are content-addressed in storage and served same-origin
 with immutable caching.
 
 ## 6. Generated covers; Playwright for social images
 
-No scanned or third-party cover art (no rights questions; one coherent
-library). Covers are HTML/CSS with live text. Social images are rendered by
+Covers use clean edition artwork when an import has it; otherwise they are
+HTML/CSS with live text, so the catalog stays visually coherent. Social images are rendered by
 Playwright from the real pages — Satori (`next/og`) does not shape Bengali
 conjuncts. Logo text is outlined with HarfBuzz for the same reason.
 

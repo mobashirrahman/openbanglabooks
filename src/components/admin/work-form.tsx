@@ -1,16 +1,14 @@
 "use client";
 
-import { useMemo, useRef, useState } from "react";
+import { useRef, useState } from "react";
 import { Plus, X } from "lucide-react";
 import { BookCover } from "@/components/cover/book-cover";
 import { saveWork } from "@/lib/admin/actions";
 import { COVER_VARIANTS, FORMS, ROLES, STATUSES } from "@/lib/admin/forms";
-import { checkPublicDomain } from "@/lib/rights";
 import { formatNumber } from "@/lib/i18n/format";
 import type { Locale } from "@/lib/i18n/config";
 import { t } from "@/lib/i18n/t";
 import type { Dictionary } from "@/lib/i18n/dictionaries/bn";
-import { cn } from "@/lib/utils";
 import { CheckboxField, Fieldset, FormStatus, SelectField, SubmitButton, TextArea, TextField, useAdminForm, type AdminLabels } from "./form-kit";
 
 export type WorkRecord = {
@@ -65,28 +63,19 @@ export function WorkForm({
   );
   const nextKey = useRef(credits.length);
   const [title, setTitle] = useState(work?.title_bn ?? "");
-  const [year, setYear] = useState(work?.original_pub_year?.toString() ?? "");
   const [variant, setVariant] = useState(work?.cover_variant ?? 0);
   const name = (a: AuthorOption) => (locale === "bn" ? a.name_bn : a.name_en);
 
   const firstAuthor = authors.find((a) => a.id === credits.find((c) => c.role === "author")?.id);
-  const verdict = useMemo(() => {
-    const died = credits.filter((c) => c.role === "author" && c.id).map((c) => authors.find((a) => a.id === c.id)?.died_year ?? null);
-    const y = Number(year.replace(/[০-৯]/g, (d) => String(d.charCodeAt(0) - 0x09e6)));
-    return checkPublicDomain({ authorDiedYears: died, firstPublished: year && Number.isInteger(y) ? y : null });
-  }, [credits, authors, year]);
-
-  const verifiedAt = work?.rights_verified_at ? new Intl.DateTimeFormat(locale === "bn" ? "bn-BD" : "en-GB", { dateStyle: "long" }).format(new Date(work.rights_verified_at)) : null;
   const creditsError = state.status === "error" ? state.errors?.authors : undefined;
 
   return (
     <form
       {...form}
-      // the cover preview and the rights check follow what is typed
+      // the cover preview follows what is typed
       onChange={(e) => {
         const el = e.target as unknown as HTMLInputElement;
         if (el.name === "title_bn") setTitle(el.value);
-        else if (el.name === "original_pub_year") setYear(el.value);
       }}
       className="space-y-8"
     >
@@ -211,37 +200,6 @@ export function WorkForm({
               </div>
             ) : null}
             <TextField name="featured_rank" label={labels.featuredRank} hint={labels.featuredHint} inputMode="numeric" defaultValue={work?.featured_rank} state={state} labels={labels} className="max-w-xs" />
-          </Fieldset>
-
-          <Fieldset legend={labels.rights}>
-            <div className={cn("rounded-[10px] px-4 py-3 text-sm", verdict.ok ? "bg-sunken" : "bg-destructive/10")} aria-live="polite">
-              <p className="font-medium">
-                {labels.rightsCheck}: {verdict.ok ? labels.rightsOk : labels.rightsNotOk}
-              </p>
-              <p lang="en" className="mt-1 text-fg-muted">
-                {verdict.ok ? verdict.basis : verdict.reason}
-              </p>
-              {verdict.ok ? (
-                <button
-                  type="button"
-                  onClick={(e) => {
-                    const field = e.currentTarget.form?.elements.namedItem("rights_basis") as HTMLTextAreaElement | null;
-                    if (field) {
-                      field.value = verdict.basis;
-                      field.focus();
-                    }
-                  }}
-                  className="mt-2 text-sm text-link underline underline-offset-4"
-                >
-                  {labels.useSuggestion}
-                </button>
-              ) : null}
-            </div>
-            <TextArea name="rights_basis" label={labels.rightsBasis} hint={labels.rightsBasisHint} rows={3} defaultValue={work?.rights_basis} state={state} labels={labels} />
-            <p className="text-sm text-fg-muted">
-              {work?.rights_verified_by && verifiedAt ? t(labels.rightsVerifiedBy, { who: work.rights_verified_by, date: verifiedAt }) : labels.rightsNotVerified}
-            </p>
-            <CheckboxField name="rights_verified" label={labels.rightsVerified} />
           </Fieldset>
         </div>
 

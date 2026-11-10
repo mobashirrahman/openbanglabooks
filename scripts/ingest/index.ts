@@ -10,7 +10,6 @@ import { join, resolve } from "node:path";
 import { parseArgs } from "node:util";
 import YAML from "yaml";
 import { createClient } from "@supabase/supabase-js";
-import { checkPublicDomain } from "../../src/lib/rights.ts";
 import { validateEpub } from "../../src/lib/epub/validate.ts";
 import { toAsciiDigits } from "../../src/lib/i18n/format.ts";
 import { resolveSource, qualitySummary, type SourceSpec } from "./sources.ts";
@@ -154,14 +153,7 @@ async function main() {
     if (!author) throw new Error(`${w.slug}: unknown author ${w.author}`);
     process.stdout.write(`\n${w.slug}: resolving… `);
 
-    // 1. rights
-    const rights = checkPublicDomain({ authorDiedYears: [author.died], firstPublished: w.first_published, year: 2026 });
-    if (!rights.ok) {
-      summary.push(`✗ ${w.slug}: rights – ${rights.reason}`);
-      continue;
-    }
-
-    // 2. completeness
+    // 1. completeness
     const src = await resolveSource(w.source);
     const q = qualitySummary(src.chapters);
     const progress = src.index?.["প্রগতি"] ?? "";
@@ -171,7 +163,7 @@ async function main() {
       continue;
     }
 
-    // 3. clean + build
+    // 2. clean + build
     const chapters: EpubChapter[] = src.chapters.map((c, i) => {
       const { xhtml } = cleanChapter(c.page.html, c.label, { part: c.part });
       const label = w.poem_labels ? `${c.label}. ${firstLine(xhtml) ?? ""}`.trim() : c.label;
@@ -202,7 +194,7 @@ async function main() {
       chapters,
     );
 
-    // 4. validate
+    // 3. validate
     const report = validateEpub(bytes);
     if (!report.ok) {
       summary.push(`✗ ${w.slug}: invalid EPUB – ${report.errors.join("; ")}`);
@@ -215,14 +207,14 @@ async function main() {
       continue;
     }
 
-    // 5. upload (content-addressed, so re-uploads are idempotent)
+    // 4. upload (content-addressed, so re-uploads are idempotent)
     const path = `${sha256}.epub`;
     const { error: upErr } = await supabase.storage
       .from("books")
       .upload(path, bytes, { contentType: "application/epub+zip", upsert: true, cacheControl: "31536000" });
     if (upErr) throw new Error(`upload ${w.slug}: ${upErr.message}`);
 
-    // 6. catalog rows
+    // 5. catalog rows
     const work = await upsert(
       "works",
       {
@@ -237,9 +229,6 @@ async function main() {
         description_bn: w.description_bn,
         description_en: w.description_en,
         status: "published",
-        rights_basis: rights.basis,
-        rights_verified_by: manifest.reviewed.by,
-        rights_verified_at: reviewedAt,
         featured_rank: w.featured_rank ?? null,
         cover_variant: variantFor(manifest.works.indexOf(w)),
       },

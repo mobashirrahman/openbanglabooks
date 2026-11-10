@@ -8,8 +8,8 @@ export async function generateMetadata(): Promise<Metadata> {
     title: locale === "bn" ? "উৎস ও স্বত্ব — কোন বই এখানে থাকে" : "Sources and rights — what we publish",
     description:
       locale === "bn"
-        ? "OpenBanglaBooks কেবল স্বত্বমুক্ত বা উন্মুক্ত লাইসেন্সের বাংলা বই প্রকাশ করে। পাঠের উৎস, লাইসেন্স ও যাচাইয়ের নিয়ম।"
-        : "OpenBanglaBooks publishes only public-domain or openly licensed Bengali books. Where texts come from, licences and how rights are checked.",
+        ? "OpenBanglaBooks বাংলা বইয়ের সম্পূর্ণ পাঠ প্রকাশ করে, উৎস ও লাইসেন্সের তথ্যসহ। পাঠের উৎস ও যাচাইয়ের নিয়ম।"
+        : "OpenBanglaBooks publishes complete Bengali texts with their sources and licences. Where the texts come from and how they are checked.",
     alternates: alternates(locale, "/about/sources", true),
   };
 }
@@ -21,9 +21,8 @@ const CONTENT = {
       {
         h: "কোন বই এখানে থাকে",
         p: [
-          "OpenBanglaBooks-এ কেবল সেই বই প্রকাশ করা হয়, যেগুলো বাংলাদেশ, ভারত ও যুক্তরাষ্ট্র — তিন জায়গাতেই স্বত্বমুক্ত, অথবা যেগুলোর লেখক বা প্রকাশক উন্মুক্ত লাইসেন্সে প্রকাশের অনুমতি দিয়েছেন।",
-          "আমাদের নিয়ম: লেখকের মৃত্যুর পর ৬০ বছর পার হতে হবে (বাংলাদেশ ও ভারতের আইন), এবং বইটি প্রথম প্রকাশিত হতে হবে যুক্তরাষ্ট্রের স্বত্বসীমার আগে (২০২৬ সালে, ১৯৩১-এর আগে)। প্রতিটি বইয়ের ক্ষেত্রে এই যাচাইয়ের ভিত্তি আর যাচাইকারীর নাম সংরক্ষণ করা হয়।",
-          "এই কারণেই কাজী নজরুল ইসলামের রচনা এখনও এখানে নেই: তাঁর মৃত্যু ১৯৭৬ সালে, তাই বাংলাদেশ ও ভারতে ২০৩৬ সালের শেষ পর্যন্ত তাঁর লেখা স্বত্বাধীন।",
+          "OpenBanglaBooks-এ বাংলা বইয়ের সম্পূর্ণ পাঠ প্রকাশ করা হয়, উৎস ও লাইসেন্সের তথ্যসহ। প্রতিটি সংস্করণের উৎস, লাইসেন্স এবং প্রযোজ্য ক্ষেত্রে স্বত্বের বিবরণ সংরক্ষিত থাকে।",
+          "প্রকাশের আগে পাঠের সম্পূর্ণতা যাচাই করা হয়: সব অধ্যায় থাকতে হবে এবং উইকিসংকলনের প্রতিটি স্ক্যান-পাতা সংশোধিত হতে হবে। যে বই অসম্পূর্ণ, সেটি প্রকাশ করা হয় না।",
         ],
       },
       {
@@ -35,7 +34,7 @@ const CONTENT = {
       },
       {
         h: "প্রচ্ছদ",
-        p: ["সব প্রচ্ছদ OpenBanglaBooks-এর নিজস্ব নকশা, বইয়ের তথ্য থেকে তৈরি। কোনো প্রকাশকের প্রচ্ছদ বা অন্যের আঁকা ছবি ব্যবহার করা হয় না।"],
+        p: ["যে সংস্করণে পরিষ্কার প্রচ্ছদ-শিল্প আছে, সেখানেই সেটি ব্যবহার করা হয়। প্রচ্ছদ না থাকলে বইয়ের তথ্য থেকে OpenBanglaBooks-এর নিজস্ব নকশা তৈরি হয়।"],
       },
       {
         h: "ভুল চোখে পড়লে",
@@ -49,9 +48,8 @@ const CONTENT = {
       {
         h: "What we publish",
         p: [
-          "OpenBanglaBooks publishes only books that are in the public domain in Bangladesh, India and the United States, or that their authors or publishers have released under an open licence.",
-          "Our rule: at least 60 years must have passed since the author's death (the term in Bangladesh and India), and the book must have been first published before the US cut-off (before 1931, as of 2026). The basis and the reviewer are recorded for every book.",
-          "This is why Kazi Nazrul Islam's works are not here yet: he died in 1976, so his writing remains in copyright in Bangladesh and India until the end of 2036.",
+          "OpenBanglaBooks publishes complete Bengali texts, with each edition's source and licence recorded.",
+          "Before publication the text is checked for completeness: every chapter must be present and every Wikisource scan page proofread. Incomplete books are not published.",
         ],
       },
       {
@@ -61,7 +59,7 @@ const CONTENT = {
           "Wikisource transcriptions are licensed CC BY-SA 4.0. The end of every book lists permanent links to the exact page revisions used.",
         ],
       },
-      { h: "Covers", p: ["All covers are original OpenBanglaBooks designs generated from each book's details. No publisher covers or third-party artwork are used."] },
+      { h: "Covers", p: ["Where an edition comes with clean cover artwork, that cover is used. Books without usable art get an original OpenBanglaBooks design generated from the book's details."] },
       { h: "Found a mistake?", p: ["Corrections can be made on Wikisource; they reach this site with the next update."] },
     ],
   },

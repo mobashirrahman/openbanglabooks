@@ -38,7 +38,6 @@ const isState = (x: EditorSession | FormState): x is FormState => "status" in x;
 function failure(error: DbError, slugField = "slug"): FormState {
   const at = Date.now();
   if (error?.code === "23505") return { status: "error", errors: { [slugField]: "taken" }, at };
-  if (error?.code === "23514" && /published_requires_rights/.test(error.message ?? "")) return { status: "error", errors: { rights_basis: "rightsRequired" }, at };
   if (error?.code === "23503") return { status: "error", message: "inUse", at };
   if (error?.code === "42501") return { status: "error", message: "forbidden", at };
   console.error("admin write failed", error);

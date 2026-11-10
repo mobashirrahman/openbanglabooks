@@ -109,8 +109,6 @@ export type WorkInput = {
   description_bn: string | null;
   description_en: string | null;
   status: Status;
-  rights_basis: string | null;
-  rights_verified: boolean;
   featured_rank: number | null;
   cover_variant: number;
   authors: { id: string; role: (typeof ROLES)[number] }[];
@@ -145,15 +143,12 @@ export function parseWork(fd: FormData): Parsed<WorkInput> {
     description_bn: r.text("description_bn", { max: 5000 }),
     description_en: r.text("description_en", { max: 5000 }),
     status: r.choice("status", STATUSES),
-    rights_basis: r.text("rights_basis", { max: 1000 }),
-    rights_verified: r.bool("rights_verified"),
     featured_rank: r.int("featured_rank", { min: 1, max: 999 }),
     cover_variant: r.int("cover_variant", { min: 0, max: COVER_VARIANTS - 1 }) ?? 0,
     authors,
     genres: r.ids("genre"),
     collections: r.ids("collection"),
   };
-  if (value.rights_verified && !value.rights_basis) r.errors.rights_basis = "required";
   return r.result(value);
 }
 

@@ -1,12 +1,11 @@
 # OpenBanglaBooks catalog manifest.
 #
 # The single source of truth for what `pnpm ingest` publishes. A work is only
-# published when:
-#   1. its Wikisource text is complete and every scan page is proofread (quality ≥ 3),
-#   2. the public-domain rule in src/lib/rights.ts passes (author died 60+ years ago
-#      AND first published before the current US cut-off), and
-#   3. `rights.reviewed_by` names the human who checked the basis.
+# published when its Wikisource text is complete and every scan page is
+# proofread (quality ≥ 3).
 #
+# `reviewed` stamps the build with the date the manifest was checked; it is
+# informational only.#
 # Descriptions and biographies are original editorial text (not copied from
 # Wikipedia). Life dates were cross-checked against Wikidata (CC0).
 #
