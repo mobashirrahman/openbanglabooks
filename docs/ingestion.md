@@ -96,3 +96,22 @@ Phase 2 adds an admin UI for this. Until then, files that a publisher has
 licensed can be validated with `validateEpub` and uploaded with the same
 storage/catalog steps; their XHTML is sanitised at render time and the reader
 CSP blocks scripts regardless.
+
+## Importing curated Telegram/scraped EPUBs
+
+`book-curate` (in the book-scrapper repo) writes `<sha256>.epub` and
+`<sha256>.json` sidecars with neutral metadata, no links and no source
+branding. Import that directory:
+
+```bash
+pnpm exec tsx scripts/import-curated.ts --dir ../book-scrapper/data/telegram/bongboi/curated --dry
+pnpm exec tsx scripts/import-curated.ts --dir ... --limit 20
+pnpm exec tsx scripts/import-curated.ts --dir ...
+```
+
+The importer validates every EPUB, dedupes by `sha256`, creates/reuses the
+author and work, uploads to R2 (`books/<sha>.epub`), and writes a published
+primary edition. Works import as `novel` and `title_en`/`title_latn` fall back
+to the Bengali title until an editor classifies/translates them. It needs
+`NEXT_PUBLIC_SUPABASE_URL` and `SUPABASE_SERVICE_ROLE_KEY` in `.env.local`,
+and an authenticated `cf` CLI for the R2 upload.
