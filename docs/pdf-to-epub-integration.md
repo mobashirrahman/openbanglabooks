@@ -131,6 +131,23 @@ OCR model, title/author/publisher, section/chapter/TOC/page-list counts and the
 internal validation report. `pnpm typecheck` and the EPUB unit tests pass.
 EPUBCheck is wired but not run here because Java is not installed on this host.
 
+## Step 5 — front matter split (implemented)
+
+The page/heading split exposed another defect: title and publisher pages were
+still part of the first chapter. `_split_front_matter` now cuts a chapter at its
+first real chapter marker (`এক`, `দ্বিতীয়`, `অধ্যায় ১`, …); everything before
+it becomes the `front` section.
+
+Verified on Nishkriti 12 pages:
+
+- 4 sections: `শিরোনাম` (title), `শুরুর পাতা` (pages 1–2, 39 words),
+  `এক` (body, pages 3–12, 2159 words), `উৎস ও স্বত্ব`;
+- the nav contains both the front matter and `এক`;
+- the chapter body starts at the page-3 anchor, not page 1.
+
+Tests: `test_pdfcraft_split.py` (front-matter split cases), full `pdf2epub`
+suite (28 tests) and `pnpm typecheck` pass.
+
 ## Next planned steps
 
 1. **Structure:** make `recover_structure` the default only where it demonstrably

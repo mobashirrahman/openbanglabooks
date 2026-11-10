@@ -1,6 +1,13 @@
 from __future__ import annotations
 
-from pdf2epub.pdfcraft import _Block, _Paragraph, _plain_text, _split_text_layout
+from pdf2epub.pdfcraft import (
+    _Block,
+    _Chapter,
+    _Paragraph,
+    _plain_text,
+    _split_front_matter,
+    _split_text_layout,
+)
 
 
 def block(page: int, order: int, text: str) -> _Block:
@@ -39,3 +46,29 @@ def test_leaves_regular_paragraph_alone():
 def test_preserves_verse_layout():
     layout = _Paragraph(ref="verse", level=-1, blocks=[block(2, 0, "পঙক্তি"), block(2, 1, "২")])
     assert _split_text_layout(layout) == [layout]
+
+
+def test_splits_front_matter_at_first_chapter_marker():
+    chapter = _Chapter(
+        id=1,
+        level=0,
+        layouts=[
+            _Paragraph(ref="text", level=-1, blocks=[block(1, 0, "প্রকাশক"), block(2, 0, "মাঘ ১৩৫৯")]),
+            _Paragraph(ref="title", level=1, blocks=[block(3, 0, "এক")]),
+            _Paragraph(ref="text", level=-1, blocks=[block(3, 1, "ভবানীপুরের চাটুয্যের পরিবার।")]),
+        ],
+    )
+    parts = _split_front_matter([chapter])
+
+    assert [part.id for part in parts] == [None, 1]
+    assert _plain_text(parts[1].layouts[0].blocks[0].content) == "এক"
+    assert _plain_text(parts[0].layouts[0].blocks[0].content) == "প্রকাশক"
+
+
+def test_front_matter_split_leaves_markerless_chapter_alone():
+    chapter = _Chapter(
+        id=2,
+        level=0,
+        layouts=[_Paragraph(ref="text", level=-1, blocks=[block(4, 0, "সাধারণ পাঠ।")])],
+    )
+    assert _split_front_matter([chapter]) == [chapter]

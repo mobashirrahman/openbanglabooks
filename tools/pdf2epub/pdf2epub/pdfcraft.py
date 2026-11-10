@@ -733,6 +733,37 @@ def _split_text_layout(layout: Layout) -> list[Layout]:
     return out or [layout]
 
 
+def _split_front_matter(chapters: list[_Chapter]) -> list[_Chapter]:
+    """Move title/publisher pages before the first real chapter into a head chapter."""
+    out: list[_Chapter] = []
+    for chapter in chapters:
+        if chapter.id is None:
+            out.append(chapter)
+            continue
+        marker = None
+        for index, layout in enumerate(chapter.layouts):
+            if (
+                isinstance(layout, _Paragraph)
+                and layout.ref in TITLE_TAGS
+                and _is_chapter_marker(_layout_text(layout))
+            ):
+                marker = index
+                break
+        if marker is None or marker == 0:
+            out.append(chapter)
+            continue
+        out.append(_Chapter(id=None, level=-1, layouts=chapter.layouts[:marker]))
+        out.append(
+            _Chapter(
+                id=chapter.id,
+                level=chapter.level,
+                layouts=chapter.layouts[marker:],
+                references=chapter.references,
+            )
+        )
+    return out
+
+
 def _chapter_label(chapter: _Chapter) -> str | None:
     for layout in chapter.layouts:
         if isinstance(layout, _Paragraph) and layout.ref in TITLE_TAGS:
@@ -809,13 +840,15 @@ def convert_pcex(
 
     with PcexArchive(pcex_path) as archive:
         documents = archive.document()
-        chapters = _clean_chapters(archive.chapters(), title)
+        chapters = archive.chapters()
         for chapter in chapters:
             chapter.layouts = [
                 split
                 for layout in chapter.layouts
                 for split in _split_text_layout(layout)
             ]
+        chapters = _clean_chapters(chapters, title)
+        chapters = _split_front_matter(chapters)
         toc_items = archive.toc()
         page_sizes = archive.pages()
 
